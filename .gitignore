@@ -1,0 +1,8 @@
+# 내부 작업 자료 — 공개 레포에 커밋하지 않는다 (로컬 전용)
+refs/
+.omo/
+
+# OS / 에디터
+.DS_Store
+*.log
+node_modules/

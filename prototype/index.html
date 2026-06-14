@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Claude-Pet · 디자인 검증 프로토타입 (mock)</title>
+<link rel="stylesheet" href="styles.css?v=9" />
+</head>
+<body>
+  <!-- ── 목 제어 패널 (제품 아님 — 시나리오 구동용) ── -->
+  <aside class="panel">
+    <header class="panel__head">
+      <span class="panel__dot"></span>
+      <h1>Claude-Pet <em>mock</em></h1>
+    </header>
+    <p class="panel__sub">백엔드 없이 목 이벤트로 <b>UI 설계</b>를 검증합니다. 실제 <code>nezu</code> 스프라이트 구동.</p>
+
+    <div class="panel__group">
+      <span class="panel__label">시나리오</span>
+      <button class="btn" data-scenario="single">① 단일 작업 풀 사이클</button>
+      <button class="btn" data-scenario="multi">② 멀티세션 스택 + 오버플로</button>
+      <button class="btn" data-scenario="permission">③ 권한 → 인라인 답장</button>
+      <button class="btn" data-scenario="error">④ 에러 상태</button>
+    </div>
+
+    <div class="panel__group">
+      <span class="panel__label">제어</span>
+      <button class="btn btn--ghost" id="replay">↻ 다시 재생</button>
+      <button class="btn btn--ghost" id="reset">■ 초기화</button>
+      <label class="speed">속도
+        <input type="range" id="speed" min="0.5" max="3" step="0.5" value="1" />
+        <output id="speedOut">1×</output>
+      </label>
+      <label class="speed">UI 배율 <span class="speed__hint">(실제 빌드는 OS가 주입)</span>
+        <input type="range" id="uiscale" min="0.8" max="1.4" step="0.05" value="1" />
+        <output id="uiscaleOut">1.00×</output>
+      </label>
+    </div>
+
+    <div class="panel__group panel__legend">
+      <span class="panel__label">상태 → 펫 atlas 행</span>
+      <ul id="legend"></ul>
+    </div>
+
+    <footer class="panel__foot">
+      <span id="status">대기 중 — 시나리오를 선택하세요</span>
+    </footer>
+  </aside>
+
+  <!-- ── 데스크탑 스테이지 (실제 화면을 흉내낸 배경) ── -->
+  <main class="stage" id="stage">
+    <div class="stage__editor" aria-hidden="true">
+      <div class="stage__gutter"></div>
+      <div class="stage__code"></div>
+    </div>
+
+    <!-- ── 펫 위젯 (= 실제 제품 컴포넌트 ⑤⑥) ── -->
+    <div class="widget" id="widget">
+      <div class="cards" id="cards"></div>
+      <button class="collapse" id="collapse" title="스택 접기/펴기" aria-label="스택 접기">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="pet" id="pet">
+        <div class="pet__sprite" id="petSprite"></div>
+        <div class="pet__say" id="petSay" hidden></div>
+      </div>
+    </div>
+  </main>
+
+  <script src="scenarios.js?v=9"></script>
+  <script src="app.js?v=9"></script>
+</body>
+</html>
