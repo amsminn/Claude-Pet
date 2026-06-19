@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+<title>Claude-Pet</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- 펫 위젯 (= 실제 제품 컴포넌트 ⑤⑥). 목 패널/스테이지 없음. -->
+  <div class="widget" id="widget">
+    <div class="cards" id="cards"></div>
+    <button class="collapse" id="collapse" title="스택 접기/펴기" aria-label="스택 접기">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="pet" id="pet">
+      <div class="pet__sprite" id="petSprite"></div>
+      <div class="pet__count" id="petCount" hidden>0</div>
+      <div class="pet__say" id="petSay" hidden></div>
+    </div>
+  </div>
+
+  <script src="../shared/constants.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

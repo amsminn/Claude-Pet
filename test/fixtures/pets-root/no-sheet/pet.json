@@ -1,0 +1,5 @@
+{
+  "id": "no-sheet",
+  "displayName": "No Sheet",
+  "description": "Missing the required spritesheetPath field — must be skipped (V2)."
+}

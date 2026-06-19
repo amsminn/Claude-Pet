@@ -1,0 +1,10 @@
+{
+  "id": "pixel-fox",
+  "spritesheetPath": "art/sheet.webp",
+  "animation": {
+    "autoDetectFrames": true,
+    "states": { "idle": { "row": 0, "durationMs": 150 } },
+    "events": { "hover": "jumping" }
+  },
+  "futureField": "ignored-forward-compat"
+}

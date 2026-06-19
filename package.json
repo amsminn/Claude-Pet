@@ -1,0 +1,33 @@
+{
+  "name": "claude-pet",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Floating desktop pet that mirrors Claude Code activity as a card stack and lets you reply inline.",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "dev.claudepet.app",
+    "productName": "Claude-Pet",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
+  }
+}

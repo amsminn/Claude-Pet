@@ -1,0 +1,7 @@
+{
+  "id": "mochi",
+  "displayName": "Mochi",
+  "description": "Synthetic test pet — fake meta only, no copyrighted art.",
+  "spritesheetPath": "spritesheet.webp",
+  "kind": "person"
+}

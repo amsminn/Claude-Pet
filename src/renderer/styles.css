@@ -1,0 +1,247 @@
+/* Claude-Pet renderer styles — ported PIXEL-FOR-PIXEL from prototype/styles.css.
+   Design is LOCKED: tokens, cards, and pet must match the prototype exactly.
+   The mock control panel + desktop stage are removed; only the product widget
+   (#widget = #cards + #pet) remains, on a transparent window background. */
+
+:root {
+  /* ── 카드 컨테이너 ── */
+  --card-w: 252px;
+  --card-min-h: 48px;
+  --card-radius: 19px;
+  --card-pad-x: 17px;
+  --card-pad-y: 11px;
+  --card-gap: 13px;
+  --card-bg: #FBFBFC;
+  --card-shadow: 0 6px 22px rgba(0,0,0,0.18);
+
+  /* ── 타이포 ──
+     크기는 macOS 카드 실측값(본문 12px·제목 13.5px·줄간격 16px → lh 1.35)을 따른다.
+     --ui-scale = 시스템 종속 노브: 실제 Electron 빌드가 OS 디스플레이/접근성 텍스트 크기에서
+     주입한다(브라우저는 시스템 폰트 키워드를 16px로 고정해 CSS로 못 읽으므로 1 고정).
+     모든 글자 크기를 이 한 변수로 비례 리스케일 → 카드 높이는 내용 따라 자동 증가. */
+  --ui-scale: 1;
+  --title-size: calc(13.5px * var(--ui-scale));
+  --title-weight: 680;
+  --title-color: #1B1B1F;
+  --body-size: calc(12px * var(--ui-scale));
+  --body-weight: 400;
+  --body-lh: 1.35;
+  --body-color: #585860;
+  --label-color: #72727A;
+
+  /* ── 상태/배지/컨트롤 ── */
+  --check-green: #22C55E;
+  --spinner-track: rgba(138,138,142,0.30);
+  --spinner-head: #9A9AA0;
+  --clock-color: #8A8A8E;
+  --error-red: #E5484D;
+  --reply-pill-bg: #D4D6DB; /* 라이트 그레이 pill */
+  --reply-pill-fg: #6A6E76; /* 그레이 텍스트 */
+  --input-bg: #FCFCFD;      /* 흰 입력칸 */
+  --input-placeholder: #9AA0A6;
+  --input-focus: #3B82F6;   /* 파랑 focus 보더 */
+  --input-border: #CDD0D6;  /* 기본 회색 보더 */
+  --close-chip-bg: #E5E5EA;
+  --close-chip-fg: #6A6A6A;
+  --chevron-color: #6A6A6A;
+  --badge-latest-bg: #ECECEC; --badge-latest-fg: #6B6B6B;
+  --badge-plusn-bg: #F1F1F3; --badge-plusn-fg: #6B6B6B;
+
+  /* ── 펫 창 ── */
+  --pet-frame-w: 192px;
+  --pet-frame-h: 208px;
+  --pet-scale: 0.80;          /* 192*0.80 ≈ 154px CSS */
+  --pet-margin-r: 14px;
+  --pet-margin-b: 6px;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  /* Transparent overlay window — only painted widget pixels show. */
+  background: transparent;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", "Apple SD Gothic Neo", system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* ───────────────────────── 펫 위젯 (제품 컴포넌트) ───────────────────────── */
+.widget {
+  position: absolute;
+  right: var(--pet-margin-r); bottom: var(--pet-margin-b);
+  width: calc(var(--card-w) + 16px);
+  display: flex; flex-direction: column; align-items: flex-end;
+  z-index: 5;
+}
+.widget.is-collapsed .cards { max-height: 0; opacity: 0; pointer-events: none; transform: translateY(8px); }
+
+/* 카드 스택 */
+.cards {
+  width: 100%;
+  display: flex; flex-direction: column; gap: var(--card-gap);
+  margin-bottom: 2px;
+  max-height: 270px;
+  overflow-y: auto;
+  padding: 16px 8px 12px;
+  scrollbar-width: none;
+  transition: opacity .2s ease, transform .28s ease;
+}
+.cards::-webkit-scrollbar { display: none; }
+/* 위쪽만 페이드(오래된 카드 스크롤 아웃). 아래는 페이드 없음 — 최신 카드 항상 또렷 */
+.cards.fade-top { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 42px, #000 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 42px, #000 100%); }
+
+/* 카드 */
+.card {
+  position: relative;
+  flex: none;            /* flex 컬럼이 카드를 내용보다 작게 못 찌그러뜨리게(본문 클리핑 방지) */
+  background: var(--card-bg);
+  border-radius: var(--card-radius);
+  padding: var(--card-pad-y) var(--card-pad-x);
+  box-shadow: var(--card-shadow);
+  min-height: var(--card-min-h);
+  transform-origin: bottom right;
+  transition: transform .26s cubic-bezier(.2,.8,.2,1), opacity .2s;
+}
+.card.is-new { animation: cardIn .26s cubic-bezier(.2,.8,.2,1); }   /* 진입 애니는 신규 카드 1회만 */
+@keyframes cardIn { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
+.card.is-leaving { opacity: 0; transform: translateY(8px) scale(.96); }
+
+.card__top { display: flex; align-items: flex-start; gap: 8px; }
+.card__title {
+  flex: 1; min-width: 0;
+  font-size: var(--title-size); font-weight: var(--title-weight); color: var(--title-color);
+  line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.card__body {
+  margin-top: 2px;
+  font-size: var(--body-size); font-weight: var(--body-weight); line-height: var(--body-lh);
+  color: var(--body-color);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.card__body.is-label { color: var(--label-color); }
+.card.is-expanded .card__body { -webkit-line-clamp: unset; }
+
+/* 상태 아이콘 (우상단) */
+.icon { width: 20px; height: 20px; flex: none; margin-top: 1px; }
+.icon--spinner {
+  border-radius: 50%;
+  border: 2px solid var(--spinner-track);
+  border-top-color: var(--spinner-head);
+  animation: spin .55s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.icon--check { border-radius: 50%; background: var(--check-green); display: grid; place-items: center; }
+.icon--check svg { width: 12px; height: 12px; }
+.icon--clock { color: var(--clock-color); }
+.icon--error { border-radius: 50%; background: var(--error-red); display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 13px; }
+
+/* 배지 */
+.badge {
+  position: absolute; font-size: 10.5px; font-weight: 650; line-height: 1;
+  padding: 3px 8px; border-radius: 9px;
+}
+.badge--latest { top: -8px; left: 14px; background: var(--badge-latest-bg); color: var(--badge-latest-fg); box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+.badge--plusn { bottom: -9px; left: 50%; transform: translateX(-50%); background: var(--badge-plusn-bg); color: var(--badge-plusn-fg); box-shadow: 0 1px 5px rgba(0,0,0,.3); }
+
+/* hover 컨트롤 */
+.card__close {
+  position: absolute; top: -8px; left: -8px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--close-chip-bg); color: var(--close-chip-fg); border: none; cursor: pointer;
+  display: grid; place-items: center; font-size: 12px; line-height: 1;
+  opacity: 0; transform: scale(.8); transition: opacity .12s, transform .12s;
+}
+.card:hover .card__close { opacity: 1; transform: scale(1); }
+/* 하단 우측 액션 pill (펼치기/답장) — 카드 아래 모서리에 걸침, hover 시 노출 */
+.card__actions {
+  position: absolute; right: 14px; bottom: -13px;
+  display: flex; gap: 6px;
+  opacity: 0; transform: translateY(-3px); transition: opacity .12s, transform .12s;
+  pointer-events: none;
+}
+.card:hover .card__actions { opacity: 1; transform: none; pointer-events: auto; }
+.card__replyBtn {
+  margin: 0; font: inherit; font-size: calc(12px * var(--ui-scale)); font-weight: 600; cursor: pointer; white-space: nowrap;
+  background: #ECECEF; color: #5A5E66; border: 1px solid rgba(0,0,0,.05);
+  border-radius: 999px; padding: 6px 14px; box-shadow: 0 2px 7px rgba(0,0,0,.14);
+}
+.card__replyBtn:hover { background: #E2E2E6; }
+/* 펼치기 = 정식 표면: 흰색 텍스트 pill (bottom-right overhang) */
+.card__expand {
+  margin: 0; font: inherit; font-size: calc(12px * var(--ui-scale)); font-weight: 600; cursor: pointer; white-space: nowrap;
+  background: #FFFFFF; color: #1B1B1F; border: 1px solid rgba(0,0,0,.07);
+  border-radius: 999px; padding: 6px 14px; box-shadow: 0 2px 8px rgba(0,0,0,.16);
+}
+.card__expand:hover { background: #F3F3F5; }
+/* 진입 트리거 = 우상단 상태아이콘 슬롯을 hover 시 '›'(오른쪽) chevron으로 시분할(소형 회색 원) */
+.slot-chev {
+  display: none; place-items: center; padding: 0; cursor: pointer; flex: none;
+  width: 22px; height: 22px; border-radius: 50%; margin-top: 1px;
+  background: #ECECEF; color: #6A6E76; border: none;
+}
+.slot-chev svg { width: 14px; height: 14px; transition: transform .18s; }
+.slot-chev svg path { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.card.has-more:hover .slot { display: none; }
+.card.has-more:hover .slot-chev { display: grid; }
+.card.is-expanded .slot-chev svg { transform: rotate(90deg); }   /* › → ⌄ when expanded */
+
+/* 인라인 답장 */
+.reply { margin-top: 11px; padding-top: 11px; border-top: 1px solid #ECECEE; display: none; gap: 8px; align-items: center; }
+.card.is-replying .reply { display: flex; }
+.reply input {
+  flex: 1; min-width: 0; font: inherit; font-size: calc(12.5px * var(--ui-scale));
+  background: var(--input-bg); color: #1B1B1F; border: 1.5px solid var(--input-border); border-radius: 11px;
+  padding: 10px 13px; outline: none; transition: border-color .12s;
+}
+.reply input::placeholder { color: var(--input-placeholder); }
+.reply input:focus { border-color: var(--input-focus); }
+.reply__send {
+  font: inherit; font-size: calc(12.5px * var(--ui-scale)); font-weight: 600; color: var(--reply-pill-fg);
+  background: var(--reply-pill-bg); border: none; border-radius: 999px; padding: 10px 17px; cursor: pointer;
+}
+.reply__send:hover { filter: brightness(0.96); }
+.card.is-replying .card__replyBtn { display: none; }
+
+/* 전역 접기 chevron */
+.collapse {
+  align-self: flex-end; margin: 0 6px 4px 0;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: rgba(40,42,52,.55); backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,.08); color: #d7dbe4; cursor: pointer;
+  display: grid; place-items: center; transition: transform .2s, background .15s;
+}
+.collapse:hover { background: rgba(56,60,74,.7); }
+.widget.is-collapsed .collapse svg { transform: rotate(180deg); }
+/* 접힘(rest) 상태 = 펫 + 카운트 배지만. ⌄ 버튼 숨김(Codex 동작, image #20) */
+.widget.is-collapsed .collapse { display: none; }
+
+/* 펫 */
+.pet { position: relative; width: calc(var(--pet-frame-w) * var(--pet-scale)); height: calc(var(--pet-frame-h) * var(--pet-scale)); }
+/* 펫 카운트 배지(접힘 상태에서 펫 우상단, 스택 카드 수) — Codex collapsed 표시 */
+.pet__count {
+  position: absolute; top: 2px; right: -2px; z-index: 3;
+  min-width: 23px; height: 23px; padding: 0 6px; box-sizing: border-box;
+  border-radius: 999px; background: var(--check-green); color: #fff;
+  font-size: 13px; font-weight: 700; line-height: 1;
+  display: grid; place-items: center;
+  border: 2px solid rgba(255,255,255,.92); box-shadow: 0 2px 8px rgba(0,0,0,.30);
+}
+.widget:not(.is-collapsed) .pet__count { display: none; } /* 펼치면 카드가 보이므로 배지 숨김 */
+.pet__sprite {
+  width: var(--pet-frame-w); height: var(--pet-frame-h);
+  transform: scale(var(--pet-scale)); transform-origin: top left;
+  background-image: var(--sprite-url);
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  background-position: 0 0;
+}
+.pet__sprite.is-fallback {
+  background: linear-gradient(160deg, #d9456b, #ff9a62);
+  border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  display: grid; place-items: center; transform: scale(var(--pet-scale)); transform-origin: top left;
+}
+.pet__sprite.is-fallback::after { content: "🐾"; font-size: 64px; }
+.pet__say {
+  position: absolute; bottom: calc(100% - 6px); left: -6px;
+  background: #EAEAEE; color: #3A3A40; font-size: 12.5px; font-weight: 500;
+  padding: 6px 11px; border-radius: 14px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  animation: cardIn .2s ease;
+}
