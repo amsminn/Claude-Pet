@@ -15,6 +15,12 @@
 
 <br>
 
+<div align="center">
+  <img src="docs/media/demo.gif" alt="Claude-Pet demo — a floating pet mirrors a Claude Code session as a card stack (thinking → working → done)" width="760">
+</div>
+
+<br>
+
 Claude-Pet is a floating desktop companion that turns Claude Code's live activity into a glanceable card stack — thinking, running a tool, waiting on a permission, done — and lets you reply to the agent right from the card. It recreates the OpenAI Codex desktop-pet experience for Claude Code (CLI), and is **asset-compatible** with the Codex pet ecosystem (`~/.codex/pets/`).
 
 > [!TIP]
@@ -49,6 +55,23 @@ Claude-Pet is a small Electron app with a strict main / preload / renderer split
 - **Asset loader** — discovers and validates Codex-compatible pets (paths + geometry only); pixel decoding and frame auto-detection happen in the renderer canvas.
 - **Pet window** — a non-activating, always-on-top, click-through panel that floats over fullscreen apps, shows on all Spaces, and drags across monitors (tracking the global cursor so it survives mixed HiDPI scales).
 - **Card stack** — the renderer paints one card per session (title, body, status icon) and sends inline replies / permission decisions back to main over IPC.
+
+## Preview
+
+<table>
+<tr>
+<td width="50%" valign="top">
+  <img src="docs/media/stack.png" alt="Multi-session card stack with a +N overflow badge">
+  <br><sub>One pet summarizes many sessions — cards stack newest-last, and the oldest collapse into a <code>+N</code> overflow.</sub>
+</td>
+<td width="50%" valign="top">
+  <img src="docs/media/permission.png" alt="An inline tool-permission request shown on a card">
+  <br><sub>Approve a tool permission (or reply to the agent) straight from the card — no context switch.</sub>
+</td>
+</tr>
+</table>
+
+> The demo above runs the bundled mock scenarios (`prototype/`); card text is sample content. The pet shown is the built-in 🐾 fallback — drop a Codex-compatible sprite into `~/.codex/pets/` to animate your own.
 
 ## Why Claude-Pet?
 
