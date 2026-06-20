@@ -69,4 +69,17 @@ contextBridge.exposeInMainWorld("claudePet", {
   resolvePermission(id, decision, message) {
     ipcRenderer.send(C.IPC.RESOLVE_PERMISSION, { id, decision, message });
   },
+
+  /** Begin dragging the pet (pointerdown on the pet sprite). */
+  dragStart() {
+    ipcRenderer.send(C.IPC.DRAG_START);
+  },
+  /** Drag tick (rAF-throttled pointermove); main re-reads the cursor. */
+  dragMove() {
+    ipcRenderer.send(C.IPC.DRAG_MOVE);
+  },
+  /** End the drag (pointerup / cancel). */
+  dragEnd() {
+    ipcRenderer.send(C.IPC.DRAG_END);
+  },
 });

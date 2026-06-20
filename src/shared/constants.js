@@ -117,6 +117,9 @@
     SET_REPLY_FOCUS: "pet:set-reply-focus", // renderer -> main  (boolean): grab key window while typing a reply
     SEND_REPLY: "pet:send-reply", // renderer -> main  (ReplyPayload)
     RESOLVE_PERMISSION: "pet:resolve-permission", // renderer -> main  (PermissionDecisionPayload)
+    DRAG_START: "pet:drag-start", // renderer -> main: begin dragging the pet (records cursor->window offset)
+    DRAG_MOVE: "pet:drag-move", // renderer -> main: drag tick (main re-reads global cursor and repositions)
+    DRAG_END: "pet:drag-end", // renderer -> main: end drag (pins position, disables auto re-anchor)
   });
 
   // ── wire / protocol tags (docs/05 §3.2, §5) ──────────────────────────────

@@ -6,3 +6,8 @@ refs/
 .DS_Store
 *.log
 node_modules/
+
+# 빌드 / 테스트 산출물 (electron-builder, playwright 캡처 등)
+dist/
+output/
+*.dmg

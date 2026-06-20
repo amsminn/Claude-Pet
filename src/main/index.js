@@ -77,6 +77,12 @@ function wireIpc() {
     win.setReplyFocus(petWindow, !!on);
   });
 
+  // Drag the pet across monitors. Main repositions from the global cursor point
+  // each tick so the window crosses monitor gaps and survives mixed HiDPI scales.
+  ipcMain.on(C.IPC.DRAG_START, () => win.startDrag(petWindow));
+  ipcMain.on(C.IPC.DRAG_MOVE, () => win.dragMove(petWindow));
+  ipcMain.on(C.IPC.DRAG_END, () => win.endDrag());
+
   ipcMain.on(C.IPC.SEND_REPLY, (_e, payload) => {
     // Phase 0: no Claude Code to deliver to; just log + keep state coherent.
     if (payload && payload.sessionId) {

@@ -41,6 +41,7 @@
   let cards = [];          // 메인 스냅샷의 cards (SessionState[])
   let curPetRow = ROW.idle;
   let widgetHovered = false; // 위젯 위에 커서가 있는지(접힘 결정에 사용)
+  let dragging = false;      // 펫을 드래그 중인지(드래그 중엔 접힘/click-through 끄지 않음)
   const frameCounts = {};  // atlas 행 -> autoDetectFrames 결과
   const cardLocal = new Map(); // sessionId -> { expanded, replying, truncatable }
 
@@ -66,15 +67,18 @@
   // ── 키드 렌더 + FLIP 재정렬 ──
   const els = new Map();
   function render() {
-    const list = cards.slice(-12);
+    const all = cards.slice(-12);
+    const visibleLimit = 3;
+    const overflowCount = Math.max(0, all.length - visibleLimit);
+    const list = all.slice(-visibleLimit);
     // 접힘(rest) 상태 펫 카운트 배지 = 스택 카드 수
-    petCount.textContent = String(list.length);
-    petCount.hidden = list.length === 0;
+    petCount.textContent = String(all.length);
+    petCount.hidden = all.length === 0;
     // 권한 대기/답장 중이면 펼친 채 유지(자동 펼침). 둘 다 아니고 hover도 아니면 접음
     // — 권한이 해소되면 hover 없이도 다시 rest로 접히게(stuck-open 방지).
     if (pinnedOpen()) widget.classList.remove("is-collapsed");
     else if (!widgetHovered) widget.classList.add("is-collapsed");
-    const done = list.filter((s) => s.state === "attention");
+    const done = all.filter((s) => s.state === "attention");
     const latestId = done.length ? done.reduce((a, b) => (a.completedAt > b.completedAt ? a : b)).sessionId : null;
 
     const first = new Map();
@@ -97,7 +101,8 @@
         cardsEl.appendChild(el);
       }
       el.style.order = String(i);
-      paintCard(el, s, { latest: s.sessionId === latestId });
+      const plusN = overflowCount && i === list.length - 1 ? overflowCount : 0;
+      paintCard(el, s, { latest: s.sessionId === latestId, plusN });
     });
 
     requestAnimationFrame(() => {
@@ -170,7 +175,7 @@
     return el;
   }
 
-  function paintCard(el, s, { latest }) {
+  function paintCard(el, s, { latest, plusN = 0 }) {
     const l = local(s.sessionId);
     el.querySelector(".card__title").textContent = s.title || "(제목 없음)";
     const b = bodyFor(s);
@@ -189,7 +194,9 @@
     }
 
     el.querySelector(".badge--latest").hidden = !latest;
-    el.querySelector(".badge--plusn").hidden = true;
+    const plus = el.querySelector(".badge--plusn");
+    plus.hidden = !plusN;
+    if (plusN) plus.textContent = `+${plusN}`;
 
     el.querySelector(".card__replyBtn").hidden = l.replying;
     el.classList.toggle("is-replying", l.replying);
@@ -211,6 +218,39 @@
   petEl.addEventListener("mouseenter", () => (hovering = true));
   petEl.addEventListener("mouseleave", () => (hovering = false));
   const HOVER_ROW = ROW.waving;
+
+  // ── 펫 드래그(듀얼 모니터 사이 이동) ──
+  //    pointer capture로 커서가 펫을 벗어나도 move 이벤트가 유지된다. 메인이 전역
+  //    커서 좌표로 창을 추적하므로 모니터 경계를 넘고 HiDPI 차이도 견딘다.
+  let dragRAF = 0;
+  petEl.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return; // 좌클릭만
+    dragging = true;
+    try { petEl.setPointerCapture(e.pointerId); } catch (_) {}
+    if (bridge && bridge.dragStart) bridge.dragStart();
+    e.preventDefault();
+  });
+  petEl.addEventListener("pointermove", () => {
+    if (!dragging || dragRAF) return;
+    dragRAF = requestAnimationFrame(() => {
+      dragRAF = 0;
+      if (bridge && bridge.dragMove) bridge.dragMove();
+    });
+  });
+  function endPetDrag(e) {
+    if (!dragging) return;
+    dragging = false;
+    if (dragRAF) { cancelAnimationFrame(dragRAF); dragRAF = 0; }
+    try { petEl.releasePointerCapture(e.pointerId); } catch (_) {}
+    if (bridge && bridge.dragEnd) bridge.dragEnd();
+    // 드롭 후 커서가 위젯 밖이면 정리(접힘 + click-through 복귀)
+    if (!widget.matches(":hover")) {
+      if (bridge && !pinnedOpen()) bridge.setInteractive(false);
+      if (!pinnedOpen()) widget.classList.add("is-collapsed");
+    }
+  }
+  petEl.addEventListener("pointerup", endPetDrag);
+  petEl.addEventListener("pointercancel", endPetDrag);
 
   let frame = 0, dir = 1, acc = 0, last = 0, curRow = -1;
   function tick(now) {
@@ -244,8 +284,8 @@
   });
   widget.addEventListener("mouseleave", () => {
     widgetHovered = false;
-    if (bridge && !pinnedOpen()) bridge.setInteractive(false);
-    if (!pinnedOpen()) widget.classList.add("is-collapsed");
+    if (bridge && !pinnedOpen() && !dragging) bridge.setInteractive(false);
+    if (!pinnedOpen() && !dragging) widget.classList.add("is-collapsed");
   });
 
   // ── 수동 접기(⌄) ──

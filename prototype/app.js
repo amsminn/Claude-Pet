@@ -107,8 +107,11 @@
   // ── 키드 렌더 + FLIP 재정렬 ──
   const els = new Map();
   function render() {
-    const list = ordered().slice(-12);              // 모든 카드(최근 12장) — 스크롤 영역
-    const done = list.filter(s => s.state === "attention");
+    const all = ordered().slice(-12);
+    const visibleLimit = 3;
+    const overflowCount = Math.max(0, all.length - visibleLimit);
+    const list = all.slice(-visibleLimit);
+    const done = all.filter(s => s.state === "attention");
     const latestId = done.length ? done.reduce((a, b) => a.completedAt > b.completedAt ? a : b).id : null;
 
     // FLIP: 이전 위치 기록
@@ -132,7 +135,8 @@
         cardsEl.appendChild(el);
       }
       el.style.order = String(i);                   // 순서는 flex order로만 — DOM 재삽입 없음(애니 재시작 방지)
-      paintCard(el, s, { latest: s.id === latestId, plusN: 0 });
+      const plusN = overflowCount && i === list.length - 1 ? overflowCount : 0;
+      paintCard(el, s, { latest: s.id === latestId, plusN });
     });
 
     // FLIP: 새 위치와 차이를 transform 으로 잡았다가 해제
@@ -149,7 +153,7 @@
       updateFades();
     });
 
-    statusEl.textContent = `세션 ${sessions.size} · 카드 ${list.length} · 펫행 ${rowName(petRow([...sessions.values()]))}`;
+    statusEl.textContent = `세션 ${sessions.size} · 카드 ${all.length} · 펫행 ${rowName(petRow([...sessions.values()]))}`;
   }
 
   // 스크롤 위치에 따라 위/아래 페이드 마스크 토글(스크롤 가능할 때만 나타남)

@@ -213,8 +213,9 @@ body {
 /* 접힘(rest) 상태 = 펫 + 카운트 배지만. ⌄ 버튼 숨김(Codex 동작, image #20) */
 .widget.is-collapsed .collapse { display: none; }
 
-/* 펫 */
-.pet { position: relative; width: calc(var(--pet-frame-w) * var(--pet-scale)); height: calc(var(--pet-frame-h) * var(--pet-scale)); }
+/* 펫 (드래그 핸들 — 듀얼 모니터 사이로 끌어 옮길 수 있음) */
+.pet { position: relative; width: calc(var(--pet-frame-w) * var(--pet-scale)); height: calc(var(--pet-frame-h) * var(--pet-scale)); cursor: grab; }
+.pet:active { cursor: grabbing; }
 /* 펫 카운트 배지(접힘 상태에서 펫 우상단, 스택 카드 수) — Codex collapsed 표시 */
 .pet__count {
   position: absolute; top: 2px; right: -2px; z-index: 3;

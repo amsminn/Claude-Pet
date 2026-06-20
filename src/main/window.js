@@ -26,6 +26,13 @@ const WIN_H = 560;
 const MARGIN_R = 14; // docs/04 --pet-margin-r
 const MARGIN_B = 6; // docs/04 --pet-margin-b
 
+// Drag state (module-level: the app has a single pet window). dragOffset is the
+// cursor->window delta captured at drag start; userPositioned disables the
+// bottom-right auto-anchor once the user manually drags the pet (e.g. across to
+// another monitor) so a later display change won't snap it back.
+let dragOffset = null;
+let userPositioned = false;
+
 /**
  * Create the floating, non-activating, click-through pet window.
  * @param {Object} [opts]
@@ -67,9 +74,15 @@ function createPetWindow(opts = {}) {
   // keeps mouse-move events flowing so the renderer can detect the pet hit area.
   win.setIgnoreMouseEvents(true, { forward: true });
 
+  userPositioned = false; // a fresh window starts auto-anchored bottom-right
   positionBottomRight(win);
-  // Re-anchor if the display metrics change (resolution / dock / monitors).
-  const reanchor = () => positionBottomRight(win);
+  // On display changes: if the user hasn't dragged the pet, re-anchor it to the
+  // bottom-right; if they have, just clamp it back on-screen so it can't get lost
+  // when a monitor is unplugged or the layout changes.
+  const reanchor = () => {
+    if (userPositioned) ensureVisible(win);
+    else positionBottomRight(win);
+  };
   screen.on("display-metrics-changed", reanchor);
   screen.on("display-added", reanchor);
   screen.on("display-removed", reanchor);
@@ -123,4 +136,59 @@ function setReplyFocus(win, on) {
   if (on) win.focus();
 }
 
-module.exports = { createPetWindow, setInteractive, setReplyFocus, positionBottomRight };
+/**
+ * Begin dragging the pet: capture the cursor->window offset in global DIP coords
+ * so the window tracks the cursor exactly. Marks the window user-positioned
+ * (disables bottom-right auto-anchor).
+ * @param {import('electron').BrowserWindow} win
+ */
+function startDrag(win) {
+  if (!win || win.isDestroyed()) return;
+  const cur = screen.getCursorScreenPoint();
+  const [wx, wy] = win.getPosition();
+  dragOffset = { dx: cur.x - wx, dy: cur.y - wy };
+  userPositioned = true;
+}
+
+/**
+ * Drag tick: reposition the window to follow the OS cursor. Reading the GLOBAL
+ * cursor point each tick (not renderer-relative deltas) is what lets the drag
+ * cross monitor gaps and survive different HiDPI scale factors between displays
+ * — the failure modes a naive drag (and Codex's) tends to hit.
+ * @param {import('electron').BrowserWindow} win
+ */
+function dragMove(win) {
+  if (!win || win.isDestroyed() || !dragOffset) return;
+  const cur = screen.getCursorScreenPoint();
+  win.setPosition(Math.round(cur.x - dragOffset.dx), Math.round(cur.y - dragOffset.dy));
+}
+
+/** End the current drag (keeps the user-positioned anchor). */
+function endDrag() {
+  dragOffset = null;
+}
+
+/**
+ * Clamp the window into the nearest display's work area so a user-dragged pet
+ * can't get stranded off-screen when a monitor is unplugged or rearranged.
+ * @param {import('electron').BrowserWindow} win
+ */
+function ensureVisible(win) {
+  if (!win || win.isDestroyed()) return;
+  const [x, y] = win.getPosition();
+  const [w, h] = win.getSize();
+  const { workArea } = screen.getDisplayMatching({ x, y, width: w, height: h });
+  const nx = Math.min(Math.max(x, workArea.x), workArea.x + workArea.width - w);
+  const ny = Math.min(Math.max(y, workArea.y), workArea.y + workArea.height - h);
+  if (nx !== x || ny !== y) win.setPosition(Math.round(nx), Math.round(ny));
+}
+
+module.exports = {
+  createPetWindow,
+  setInteractive,
+  setReplyFocus,
+  startDrag,
+  dragMove,
+  endDrag,
+  positionBottomRight,
+};
