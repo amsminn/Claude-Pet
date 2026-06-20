@@ -1,28 +1,29 @@
-"use strict";
 /**
  * App entry — the main glue. Boots the pet window, initializes the module stubs
  * (assets / server / state / permission / hooks), wires IPC, and (Phase 0)
  * replays a mock scenario so the renderer is visible without Claude Code.
  *
- * Electron-runtime code lives ONLY here and in window.js. Everything imported
+ * Electron-runtime code lives ONLY here and in window.ts. Everything imported
  * below (state, permission, assets, server, hooks-install) is electron-free and
  * unit-tested with `node --test`.
  */
-const { app, ipcMain, BrowserWindow } = require("electron");
+import { app, ipcMain, BrowserWindow } from "electron";
 
-const C = require("../shared/constants");
-const win = require("./window");
-const assets = require("./assets");
-const state = require("./state");
-const permission = require("./permission");
-const server = require("./server");
-const hooksInstall = require("./hooks-install");
-const { SCENARIOS } = require("./mock-scenarios");
+import * as C from "../shared/constants";
+import * as win from "./window";
+import * as assets from "./assets";
+import * as state from "./state";
+import * as permission from "./permission";
+import * as server from "./server";
+import * as hooksInstall from "./hooks-install";
+import { SCENARIOS } from "./mock-scenarios";
+import type { PetAsset, PermissionDecision, StatePayload, WirePayload } from "../shared/types";
 
 // Hook wiring is opt-out via env so a headless/demo launch can run without
 // touching ~/.claude/settings.json (Phase 0 mock playback). Default = install.
-const HOOKS_DISABLED = /^(0|false|no)$/i.test(process.env.CLAUDE_PET_HOOKS || "")
-  || /^(1|true|yes)$/i.test(process.env.CLAUDE_PET_NO_HOOKS || "");
+const HOOKS_DISABLED =
+  /^(0|false|no)$/i.test(process.env.CLAUDE_PET_HOOKS || "") ||
+  /^(1|true|yes)$/i.test(process.env.CLAUDE_PET_NO_HOOKS || "");
 
 // ── module instances (electron-free cores) ───────────────────────────────
 const store = state.createStore();
@@ -30,20 +31,20 @@ const bridge = permission.createBridge();
 
 // permission request id -> sessionId, so a UI decision can advance the right
 // session even when the wire id (perm request) differs from the session id.
-const permSession = new Map();
+const permSession = new Map<string, string>();
 
-let petWindow = null;
-let httpServer = null;
+let petWindow: BrowserWindow | null = null;
+let httpServer: Awaited<ReturnType<typeof server.startServer>> | null = null;
 let hooksInstalled = false; // true once installHooks has registered our hooks
-let petAsset = null; // resolved sprite descriptor or null (renderer falls back to 🐾)
-let mockTimers = [];
+let petAsset: PetAsset | null = null; // resolved sprite descriptor or null (renderer falls back to 🐾)
+let mockTimers: NodeJS.Timeout[] = [];
 
 /**
  * Push the current snapshot (+ resolved pet asset) to the renderer.
  */
-function pushState() {
+function pushState(): void {
   if (!petWindow || petWindow.isDestroyed()) return;
-  const snap = state.snapshot(store);
+  const snap: StatePayload = state.snapshot(store);
   snap.petAsset = petAsset; // {spritesheetUrl, frameW, frameH, atlas} | null
   petWindow.webContents.send(C.IPC.STATE, snap);
 }
@@ -53,7 +54,7 @@ function pushState() {
  * the first; null => renderer uses the 🐾 fallback (build-plan exit allows no
  * asset conversion). Never throws.
  */
-function resolvePetAsset() {
+function resolvePetAsset(): void {
   try {
     const pets = assets.discoverPets();
     if (pets.length) petAsset = assets.loadPet(pets[0].slug);
@@ -65,7 +66,7 @@ function resolvePetAsset() {
 /**
  * Wire renderer -> main IPC.
  */
-function wireIpc() {
+function wireIpc(): void {
   ipcMain.on(C.IPC.SET_INTERACTIVE, (_e, interactive) => {
     win.setInteractive(petWindow, !!interactive);
   });
@@ -93,7 +94,7 @@ function wireIpc() {
   });
 
   ipcMain.on(C.IPC.RESOLVE_PERMISSION, (_e, { id, decision, message } = {}) => {
-    const verdict = decision === "deny" ? "deny" : "allow";
+    const verdict: PermissionDecision = decision === "deny" ? "deny" : "allow";
 
     // Settle the held HTTP request via the bridge. The bridge picks the right
     // wire envelope for the request form and settles the open /permission
@@ -124,13 +125,13 @@ function wireIpc() {
  *                   blocks; on app close / disconnect the server drains it to a
  *                   no-decision (native fallback, never a synthesized verdict).
  */
-async function startLocalServer() {
+async function startLocalServer(): Promise<void> {
   httpServer = await server.startServer({
-    onEvent: (payload) => {
+    onEvent: (payload: WirePayload) => {
       state.applyEvent(store, payload);
       pushState();
     },
-    onPermission: (payload, settle) => {
+    onPermission: (payload: WirePayload, settle: (envelope: object | null) => void) => {
       const p = payload && typeof payload === "object" ? payload : {};
       const sessionId = p.sessionId || p.session_id || p.s || "unknown";
 
@@ -145,7 +146,7 @@ async function startLocalServer() {
         sessionId,
         form: "PermissionRequest", // interactive PermissionRequest hook (build-plan §0)
         settle,
-        meta: (p.perm && typeof p.perm === "object") ? p.perm : {},
+        meta: p.perm && typeof p.perm === "object" ? p.perm : {},
       });
       permSession.set(id, sessionId);
 
@@ -160,39 +161,36 @@ async function startLocalServer() {
 
 /**
  * Extract a wire-supplied permission request id, if any, from a hook payload.
- * @param {Object} p
- * @returns {string|undefined}
  */
-function pickPermId(p) {
+function pickPermId(p: WirePayload): string | undefined {
   const raw = p.perm || p.permission || p.permissionRequest || {};
-  const cand = p.id || p.requestId || p.request_id
-    || (raw && (raw.id || raw.requestId || raw.request_id));
+  const cand =
+    p.id ||
+    p.requestId ||
+    p.request_id ||
+    (raw && (raw.id || raw.requestId || raw.request_id));
   return typeof cand === "string" && cand ? cand : undefined;
 }
 
 /**
  * Return a shallow copy of the permission payload with `id` stamped onto its
  * perm descriptor, so state.applyEvent records pendingPermission.id === id.
- * @param {Object} p
- * @param {string} id
- * @returns {Object}
  */
-function withPermId(p, id) {
-  const rawPerm = (p.perm && typeof p.perm === "object") ? p.perm : {};
+function withPermId(p: WirePayload, id: string): WirePayload {
+  const rawPerm = p.perm && typeof p.perm === "object" ? p.perm : {};
   return { ...p, kind: "PermissionRequest", perm: { ...rawPerm, id } };
 }
 
 // ── Phase 0 mock playback ─────────────────────────────────────────────────
-function clearMock() {
+function clearMock(): void {
   mockTimers.forEach(clearTimeout);
   mockTimers = [];
 }
 
 /**
  * Replay a named mock scenario through the real store so the renderer paints.
- * @param {string} [key="single"]
  */
-function replayScenario(key = "single") {
+function replayScenario(key = "single"): void {
   clearMock();
   store.sessions.clear();
   store.seq = 0;
@@ -210,11 +208,9 @@ function replayScenario(key = "single") {
 /**
  * After a mock permission decision, schedule a short continuation so the demo
  * resolves visibly (Phase 0 only).
- * @param {string} sessionId
- * @param {"allow"|"deny"} decision
  */
-function replayContinuation(sessionId, decision) {
-  const tail =
+function replayContinuation(sessionId: string, decision: PermissionDecision): void {
+  const tail: WirePayload[] =
     decision === "allow"
       ? [
           { t: 200, kind: "PostToolUse", sessionId },
@@ -239,7 +235,7 @@ function replayContinuation(sessionId, decision) {
  * the registration converged to the live port. Opt out with CLAUDE_PET_HOOKS=0
  * / CLAUDE_PET_NO_HOOKS=1 (Phase 0 demo). Never throws.
  */
-function setupHooks() {
+function setupHooks(): void {
   if (HOOKS_DISABLED || !httpServer) return;
   try {
     hooksInstall.installHooks({ port: httpServer.port, host: httpServer.host });
@@ -253,7 +249,7 @@ function setupHooks() {
  * Remove only our hooks on quit so an absent app never leaves Claude Code
  * POSTing to a dead port (build-plan Phase 1 "언인스톨"). Never throws.
  */
-function teardownHooks() {
+function teardownHooks(): void {
   if (!hooksInstalled) return;
   try {
     hooksInstall.uninstallHooks();
@@ -301,4 +297,4 @@ app.on("before-quit", async () => {
 });
 
 // Exported for potential test harnesses / future scenario switcher.
-module.exports = { replayScenario };
+export { replayScenario };

@@ -1,51 +1,43 @@
-# Claude-Pet 디자인 검증 프로토타입 (mock)
+# Claude-Pet Design-Verification Prototype (mock)
 
-> **상태: 디자인 확정(locked).** 실제 백엔드 없이 카드/펫 UI 디자인이 맞는지 눈으로 검증하기 위한
-> 정적 목(mock)이다. 토큰·레이아웃·크기·인터랙션 외형은 이 프로토타입을 **source of truth**로
-> 삼는다([`../docs/04-pet-ui/pet-and-cards.md`](../docs/04-pet-ui/pet-and-cards.md)와 동기화).
+> **Status: design locked.** A static mock for visually verifying that the card/pet UI design is right, without a real backend. The tokens, layout, sizes, and interaction appearance treat this prototype as the **source of truth** (kept in sync with [`../docs/04-pet-ui/pet-and-cards.md`](../docs/04-pet-ui/pet-and-cards.md)).
 
-## 무엇인가 / 무엇이 아닌가
+## What it is / is not
 
-- ⭕ Codex 펫의 **카드 스택 + 플로팅 펫의 외형·인터랙션 디자인**을 픽셀 단위로 재현한 정적 프로토타입.
-  크기는 Codex 실제 화면녹화(Retina 2x) 프레임을 직접 측정해 맞췄다.
-- ❌ 실제 Claude Code 연동·이벤트 수신·답장 전송·영속성은 **없다**. 전부 목 시나리오로 구동한다.
+- ⭕ A static prototype that pixel-perfectly reproduces the **appearance and interaction design of the Codex pet's card stack + floating pet**. The sizes were matched by directly measuring frames from the actual Codex screen recordings (Retina 2x).
+- ❌ There is **no** real Claude Code integration, event intake, reply sending, or persistence. Everything runs on mock scenarios.
 
-## 실행
+## Running it
 
-빌드 없음(정적 파일). 스프라이트 webp 로드 때문에 `file://` 보다 로컬 HTTP 권장:
+No build (static files). Because of loading the sprite webp, a local HTTP server is recommended over `file://`:
 
 ```sh
 cd Claude-Pet
 python3 -m http.server 8765
-# 브라우저: http://127.0.0.1:8765/prototype/index.html
+# Browser: http://127.0.0.1:8765/prototype/index.html
 ```
 
-좌측 목 제어 패널에서 조작한다:
-- **시나리오**: ① 단일 작업 풀 사이클 · ② 멀티세션 스택+오버플로 · ③ 권한→인라인 답장 · ④ 에러 상태
-- **속도**: 시나리오 재생 배속
-- **UI 배율**: 시스템 종속 노브 시연(실제 빌드는 OS 디스플레이/접근성 텍스트 크기에서 주입). 글자 전체가
-  변수 하나(`--ui-scale`)로 비례 리스케일된다.
+Drive it from the mock control panel on the left:
+- **Scenario**: ① Single-task full cycle · ② Multi-session stack + overflow · ③ Permission → inline reply · ④ Error state
+- **Speed**: Scenario playback speed multiplier
+- **UI scale**: Demonstrates the system-dependent knob (the real build injects it from the OS display / accessibility text size). The entire text rescales proportionally via a single variable (`--ui-scale`).
 
-## 구성
+## Structure
 
-| 파일 | 역할 |
+| File | Role |
 |---|---|
-| `index.html` | 목 제어 패널 + 데스크탑 스테이지 + 펫 위젯(`#widget > #cards + #pet`) |
-| `styles.css` | 모든 디자인 토큰(`:root`)·카드/펫 스타일. 크기는 실측값(본문 12px·제목 13.5px·카드 폭 252px) |
-| `app.js` | 목 이벤트 엔진 — 상태→펫 atlas 행 매핑, 카드 렌더·flex `order` reorder·상단 스크롤 페이드·`autoDetectFrames`(빈 프레임 깜빡임 방지) |
-| `scenarios.js` | 목 시나리오 4종 정의 |
+| `index.html` | Mock control panel + desktop stage + pet widget (`#widget > #cards + #pet`) |
+| `styles.css` | All design tokens (`:root`) and card/pet styles. Sizes are measured values (body 12px · title 13.5px · card width 252px) |
+| `app.js` | The mock event engine — state → pet atlas row mapping, card render, flex `order` reorder, top scroll fade, `autoDetectFrames` (prevents blank-frame flicker) |
+| `scenarios.js` | Definitions of the 4 mock scenarios |
 
-## 펫 스프라이트
+## Pet sprite
 
-`../refs/sample-pet/spritesheet.webp`(nezu)를 로드한다. **`refs/`는 `.gitignore`** 라 fresh clone에는
-없으며, 그 경우 펫은 **🐾 폴백**으로 표시된다. **카드 디자인은 스프라이트 없이도 완전히 렌더**되므로
-디자인 검증에는 지장이 없다.
+Loads `../refs/sample-pet/spritesheet.webp` (nezu). Since **`refs/` is `.gitignore`d**, it is absent on a fresh clone, in which case the pet shows the **🐾 fallback**. **The card design renders completely even without the sprite**, so this does not hinder design verification.
 
-## 알려진 한계 (디자인 범위 밖 — 실제 구현에서 해결)
+## Known limitations (out of design scope — resolved in the real implementation)
 
-이 프로토타입은 **디자인 외형 검증**이 목적이라 런타임 동작 버그는 의도적으로 남겨둔다:
+Since this prototype is meant for **design-appearance verification**, runtime behavior bugs are intentionally left in:
 
-- **답장 라우팅 목 버그**: 답장 입력을 전송하면 의도한 카드/세션이 아닌 다른 곳으로 반영되는 경우가 있다.
-  목 엔진의 카드↔세션 매핑을 단순화한 탓이며, 정식 동작은 실제 구현의
-  [블로킹 훅 답장 경로](../docs/05-claude-integration/claude-code-hooks.md)에서 처리한다.
-- 백엔드·영속성·멀티 모니터·창 드래그/투명/always-on-top 등 OS 런타임 동작 일반은 미구현.
+- **Reply routing mock bug**: When you send a reply input, it sometimes lands on a different card/session than intended. This is due to a simplified card↔session mapping in the mock engine; the real behavior is handled by the [blocking hook reply path](../docs/05-claude-integration/claude-code-hooks.md) in the actual implementation.
+- Backend, persistence, multi-monitor, and window drag/transparency/always-on-top — runtime OS behavior in general — are unimplemented.

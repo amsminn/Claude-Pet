@@ -1,4 +1,3 @@
-"use strict";
 /**
  * Pet window factory (component ⑤ shell) — the ONLY electron-runtime glue for
  * the window. Uses the verified build-plan §0 recipe and nothing else.
@@ -16,8 +15,8 @@
  *     (Pure transparent windows no longer auto-pass clicks — this toggle is
  *     mandatory.)
  */
-const path = require("node:path");
-const { BrowserWindow, screen } = require("electron");
+import { join } from "node:path";
+import { BrowserWindow, screen } from "electron";
 
 // Default canvas for the widget (cards stack + pet). Generous; the page is
 // transparent so only painted pixels show.
@@ -30,17 +29,19 @@ const MARGIN_B = 6; // docs/04 --pet-margin-b
 // cursor->window delta captured at drag start; userPositioned disables the
 // bottom-right auto-anchor once the user manually drags the pet (e.g. across to
 // another monitor) so a later display change won't snap it back.
-let dragOffset = null;
+let dragOffset: { dx: number; dy: number } | null = null;
 let userPositioned = false;
+
+interface CreatePetWindowOptions {
+  /** absolute preload path (defaults to the built ../preload/index.js) */
+  preload?: string;
+}
 
 /**
  * Create the floating, non-activating, click-through pet window.
- * @param {Object} [opts]
- * @param {string} [opts.preload]  absolute preload path (defaults to ../preload.js)
- * @returns {import('electron').BrowserWindow}
  */
-function createPetWindow(opts = {}) {
-  const preload = opts.preload || path.join(__dirname, "..", "preload.js");
+export function createPetWindow(opts: CreatePetWindowOptions = {}): BrowserWindow {
+  const preload = opts.preload || join(__dirname, "../preload/index.js");
 
   const win = new BrowserWindow({
     width: WIN_W,
@@ -79,7 +80,7 @@ function createPetWindow(opts = {}) {
   // On display changes: if the user hasn't dragged the pet, re-anchor it to the
   // bottom-right; if they have, just clamp it back on-screen so it can't get lost
   // when a monitor is unplugged or the layout changes.
-  const reanchor = () => {
+  const reanchor = (): void => {
     if (userPositioned) ensureVisible(win);
     else positionBottomRight(win);
   };
@@ -92,7 +93,13 @@ function createPetWindow(opts = {}) {
     screen.removeListener("display-removed", reanchor);
   });
 
-  win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+  // electron-vite: load the dev server (with HMR) when present, else the built
+  // renderer html (production / preview).
+  if (process.env["ELECTRON_RENDERER_URL"]) {
+    win.loadURL(process.env["ELECTRON_RENDERER_URL"]);
+  } else {
+    win.loadFile(join(__dirname, "../renderer/index.html"));
+  }
   win.once("ready-to-show", () => win.showInactive());
 
   return win;
@@ -100,9 +107,8 @@ function createPetWindow(opts = {}) {
 
 /**
  * Anchor the window to the bottom-right of the primary display work area.
- * @param {import('electron').BrowserWindow} win
  */
-function positionBottomRight(win) {
+export function positionBottomRight(win: BrowserWindow): void {
   const { workArea } = screen.getPrimaryDisplay();
   const [w, h] = win.getSize();
   const x = workArea.x + workArea.width - w - MARGIN_R;
@@ -113,10 +119,8 @@ function positionBottomRight(win) {
 /**
  * Apply the renderer's hover state to window click-through. interactive=true
  * while the cursor is over the pet/cards hit area, false otherwise.
- * @param {import('electron').BrowserWindow} win
- * @param {boolean} interactive
  */
-function setInteractive(win, interactive) {
+export function setInteractive(win: BrowserWindow | null, interactive: boolean): void {
   if (!win || win.isDestroyed()) return;
   win.setIgnoreMouseEvents(!interactive, { forward: true });
 }
@@ -127,10 +131,8 @@ function setInteractive(win, interactive) {
  * on macOS that also means it can never become the key window, so a reply
  * <input> cannot receive keystrokes. Flip focusable on (and make it key via
  * focus()) only while a reply field is open, then drop back to non-focusable.
- * @param {import('electron').BrowserWindow} win
- * @param {boolean} on
  */
-function setReplyFocus(win, on) {
+export function setReplyFocus(win: BrowserWindow | null, on: boolean): void {
   if (!win || win.isDestroyed()) return;
   win.setFocusable(!!on);
   if (on) win.focus();
@@ -140,9 +142,8 @@ function setReplyFocus(win, on) {
  * Begin dragging the pet: capture the cursor->window offset in global DIP coords
  * so the window tracks the cursor exactly. Marks the window user-positioned
  * (disables bottom-right auto-anchor).
- * @param {import('electron').BrowserWindow} win
  */
-function startDrag(win) {
+export function startDrag(win: BrowserWindow | null): void {
   if (!win || win.isDestroyed()) return;
   const cur = screen.getCursorScreenPoint();
   const [wx, wy] = win.getPosition();
@@ -155,25 +156,23 @@ function startDrag(win) {
  * cursor point each tick (not renderer-relative deltas) is what lets the drag
  * cross monitor gaps and survive different HiDPI scale factors between displays
  * — the failure modes a naive drag (and Codex's) tends to hit.
- * @param {import('electron').BrowserWindow} win
  */
-function dragMove(win) {
+export function dragMove(win: BrowserWindow | null): void {
   if (!win || win.isDestroyed() || !dragOffset) return;
   const cur = screen.getCursorScreenPoint();
   win.setPosition(Math.round(cur.x - dragOffset.dx), Math.round(cur.y - dragOffset.dy));
 }
 
 /** End the current drag (keeps the user-positioned anchor). */
-function endDrag() {
+export function endDrag(): void {
   dragOffset = null;
 }
 
 /**
  * Clamp the window into the nearest display's work area so a user-dragged pet
  * can't get stranded off-screen when a monitor is unplugged or rearranged.
- * @param {import('electron').BrowserWindow} win
  */
-function ensureVisible(win) {
+export function ensureVisible(win: BrowserWindow | null): void {
   if (!win || win.isDestroyed()) return;
   const [x, y] = win.getPosition();
   const [w, h] = win.getSize();
@@ -182,13 +181,3 @@ function ensureVisible(win) {
   const ny = Math.min(Math.max(y, workArea.y), workArea.y + workArea.height - h);
   if (nx !== x || ny !== y) win.setPosition(Math.round(nx), Math.round(ny));
 }
-
-module.exports = {
-  createPetWindow,
-  setInteractive,
-  setReplyFocus,
-  startDrag,
-  dragMove,
-  endDrag,
-  positionBottomRight,
-};

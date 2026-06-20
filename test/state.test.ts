@@ -1,18 +1,17 @@
-"use strict";
-const { test } = require("node:test");
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const state = require("../src/main/state");
-const C = require("../src/shared/constants");
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as state from "../src/main/state";
+import * as C from "../src/shared/constants";
 
 test("applyEvent creates one card per session and updates in place", () => {
   const store = state.createStore();
   state.applyEvent(store, { kind: "SessionStart", sessionId: "A" });
   state.applyEvent(store, { kind: "UserPromptSubmit", sessionId: "A", title: "T" });
   assert.equal(store.sessions.size, 1);
-  const s = store.sessions.get("A");
+  const s = store.sessions.get("A")!;
   assert.equal(s.state, "thinking");
   assert.equal(s.title, "T");
 });
@@ -21,14 +20,14 @@ test("title/body are never overwritten with empty values (invariant)", () => {
   const store = state.createStore();
   state.applyEvent(store, { kind: "UserPromptSubmit", sessionId: "A", title: "Keep me" });
   state.applyEvent(store, { kind: "PreToolUse", sessionId: "A" }); // no title
-  assert.equal(store.sessions.get("A").title, "Keep me");
+  assert.equal(store.sessions.get("A")!.title, "Keep me");
 });
 
 test("Stop sets attention, fills body, and marks completedAt", () => {
   const store = state.createStore();
   state.applyEvent(store, { kind: "UserPromptSubmit", sessionId: "A", title: "T" });
   state.applyEvent(store, { kind: "Stop", sessionId: "A", body: "done" });
-  const s = store.sessions.get("A");
+  const s = store.sessions.get("A")!;
   assert.equal(s.state, "attention");
   assert.equal(s.body, "done");
   assert.ok(s.completedAt > 0);
@@ -37,16 +36,16 @@ test("Stop sets attention, fills body, and marks completedAt", () => {
 test("PermissionRequest sets pendingPermission; error clears it", () => {
   const store = state.createStore();
   state.applyEvent(store, { kind: "PermissionRequest", sessionId: "A", perm: { tool: "Bash", cmd: "ls" } });
-  assert.equal(store.sessions.get("A").pendingPermission.tool, "Bash");
+  assert.equal(store.sessions.get("A")!.pendingPermission!.tool, "Bash");
   state.applyEvent(store, { kind: "PostToolUseFailure", sessionId: "A" });
-  assert.equal(store.sessions.get("A").state, "error");
-  assert.equal(store.sessions.get("A").pendingPermission, null);
+  assert.equal(store.sessions.get("A")!.state, "error");
+  assert.equal(store.sessions.get("A")!.pendingPermission, null);
 });
 
 test("resolvePermission clears pending and advances state", () => {
   const store = state.createStore();
   state.applyEvent(store, { kind: "PermissionRequest", sessionId: "A", perm: { tool: "Bash", cmd: "ls" } });
-  const allowed = state.resolvePermission(store, "A", "allow");
+  const allowed = state.resolvePermission(store, "A", "allow")!;
   assert.equal(allowed.state, "working");
   assert.equal(allowed.pendingPermission, null);
   assert.equal(state.resolvePermission(store, "A", "allow"), null); // no pending now
@@ -116,7 +115,7 @@ test("extractCardBody returns '' for missing file (never throws)", () => {
 // fields are doc-uncertain, so parsing must accept several aliases.)
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "claude-pet-"));
-function writeJsonl(dir, rows) {
+function writeJsonl(dir: string, rows: any[]) {
   const file = path.join(dir, "session.jsonl");
   fs.writeFileSync(file, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
   return file;
@@ -131,14 +130,14 @@ test("defensive parse: raw snake_case hook payload (session_id, hook_event_name)
   });
   const s = store.sessions.get("raw1");
   assert.ok(s, "session keyed by session_id alias");
-  assert.equal(s.state, "thinking");
-  assert.equal(s.title, "snake title");
+  assert.equal(s!.state, "thinking");
+  assert.equal(s!.title, "snake title");
 });
 
 test("defensive parse: short keys (s / kind) used by mock-scenarios", () => {
   const store = state.createStore();
   state.applyEvent(store, { kind: "PreToolUse", s: "short1" });
-  assert.equal(store.sessions.get("short1").state, "working");
+  assert.equal(store.sessions.get("short1")!.state, "working");
 });
 
 test("defensive parse: missing sessionId falls back to 'unknown', never throws", () => {
@@ -149,21 +148,21 @@ test("defensive parse: missing sessionId falls back to 'unknown', never throws",
 
 test("defensive parse: non-object payload does not throw", () => {
   const store = state.createStore();
-  assert.doesNotThrow(() => state.applyEvent(store, null));
-  assert.doesNotThrow(() => state.applyEvent(store, "garbage"));
+  assert.doesNotThrow(() => state.applyEvent(store, null as any));
+  assert.doesNotThrow(() => state.applyEvent(store, "garbage" as any));
 });
 
 test("explicit payload.state overrides EVENT_TO_STATE lookup", () => {
   const store = state.createStore();
   state.applyEvent(store, { kind: "PreToolUse", sessionId: "A", state: "juggling" });
-  assert.equal(store.sessions.get("A").state, "juggling");
+  assert.equal(store.sessions.get("A")!.state, "juggling");
 });
 
 test("unknown event keeps prior state (no spurious transition)", () => {
   const store = state.createStore();
   state.applyEvent(store, { kind: "PreToolUse", sessionId: "A" });
   state.applyEvent(store, { kind: "TotallyMadeUpEvent", sessionId: "A" });
-  assert.equal(store.sessions.get("A").state, "working");
+  assert.equal(store.sessions.get("A")!.state, "working");
 });
 
 test("perm descriptor is normalized from command/toolName aliases", () => {
@@ -173,7 +172,7 @@ test("perm descriptor is normalized from command/toolName aliases", () => {
     sessionId: "A",
     perm: { toolName: "Bash", command: "ls -la", id: "req-9" },
   });
-  const pp = store.sessions.get("A").pendingPermission;
+  const pp = store.sessions.get("A")!.pendingPermission!;
   assert.equal(pp.tool, "Bash");
   assert.equal(pp.cmd, "ls -la");
   assert.equal(pp.id, "req-9");
@@ -183,7 +182,7 @@ test("Stop with explicit error flag promotes attention -> error", () => {
   const store = state.createStore();
   state.applyEvent(store, { kind: "UserPromptSubmit", sessionId: "A", title: "T" });
   state.applyEvent(store, { kind: "Stop", sessionId: "A", isApiErrorMessage: true });
-  assert.equal(store.sessions.get("A").state, "error");
+  assert.equal(store.sessions.get("A")!.state, "error");
 });
 
 test("Stop promotes to error when transcript tail has isApiErrorMessage", () => {
@@ -194,7 +193,7 @@ test("Stop promotes to error when transcript tail has isApiErrorMessage", () => 
   ]);
   const store = state.createStore();
   state.applyEvent(store, { kind: "Stop", sessionId: "A", transcriptPath: file });
-  assert.equal(store.sessions.get("A").state, "error");
+  assert.equal(store.sessions.get("A")!.state, "error");
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -205,21 +204,21 @@ test("Stop stays attention when transcript tail has no error", () => {
   ]);
   const store = state.createStore();
   state.applyEvent(store, { kind: "Stop", sessionId: "A", transcript_path: file });
-  assert.equal(store.sessions.get("A").state, "attention");
+  assert.equal(store.sessions.get("A")!.state, "attention");
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("Stop with unreadable transcriptPath stays attention (never escalates)", () => {
   const store = state.createStore();
   state.applyEvent(store, { kind: "Stop", sessionId: "A", transcriptPath: "/no/such.jsonl" });
-  assert.equal(store.sessions.get("A").state, "attention");
+  assert.equal(store.sessions.get("A")!.state, "attention");
 });
 
 test("title is truncated to <=40 chars with ellipsis", () => {
   const store = state.createStore();
   const long = "x".repeat(80);
   state.applyEvent(store, { kind: "UserPromptSubmit", sessionId: "A", title: long });
-  const title = store.sessions.get("A").title;
+  const title = store.sessions.get("A")!.title;
   assert.ok(title.length <= 40, `title length ${title.length} <= 40`);
   assert.ok(title.endsWith("…"));
 });
@@ -227,7 +226,7 @@ test("title is truncated to <=40 chars with ellipsis", () => {
 test("title collapses to first line only", () => {
   const store = state.createStore();
   state.applyEvent(store, { kind: "UserPromptSubmit", sessionId: "A", title: "line one\nline two" });
-  assert.equal(store.sessions.get("A").title, "line one");
+  assert.equal(store.sessions.get("A")!.title, "line one");
 });
 
 test("title secrets are redacted", () => {
@@ -237,7 +236,7 @@ test("title secrets are redacted", () => {
     sessionId: "A",
     title: "API_KEY=sk-abcdefghijklmnop",
   });
-  const title = store.sessions.get("A").title;
+  const title = store.sessions.get("A")!.title;
   assert.ok(!title.includes("sk-abcdefghijklmnop"), `secret leaked: ${title}`);
 });
 
@@ -248,20 +247,20 @@ test("body secrets are redacted on Stop", () => {
     sessionId: "A",
     body: "your token: ghp_ABCDEFGHIJKLMNOPQRSTUVWX done",
   });
-  const body = store.sessions.get("A").body;
+  const body = store.sessions.get("A")!.body;
   assert.ok(!body.includes("ghp_ABCDEFGHIJKLMNOPQRSTUVWX"), `secret leaked: ${body}`);
 });
 
 test("body is clamped to 2200 chars", () => {
   const store = state.createStore();
   state.applyEvent(store, { kind: "Stop", sessionId: "A", body: "a".repeat(5000) });
-  assert.equal(store.sessions.get("A").body.length, 2200);
+  assert.equal(store.sessions.get("A")!.body.length, 2200);
 });
 
 test("resolvePermission deny advances to attention and stamps completedAt", () => {
   const store = state.createStore();
   state.applyEvent(store, { kind: "PermissionRequest", sessionId: "A", perm: { tool: "Bash", cmd: "rm" } });
-  const s = state.resolvePermission(store, "A", "deny");
+  const s = state.resolvePermission(store, "A", "deny")!;
   assert.equal(s.state, "attention");
   assert.ok(s.completedAt > 0);
   assert.equal(s.pendingPermission, null);
@@ -302,7 +301,7 @@ test("snapshot.petRow reflects activity even when a card is hidden", () => {
 
 test("petRow tolerates an empty / non-array list", () => {
   assert.equal(state.petRow([]), C.ROW.idle);
-  assert.equal(state.petRow(undefined), C.ROW.idle);
+  assert.equal(state.petRow(undefined as any), C.ROW.idle);
 });
 
 test("notification state drives petRow to waving", () => {
@@ -406,8 +405,8 @@ test("repeat Stop on an already-attention card does not re-stamp completedAt", (
   const store = state.createStore();
   state.applyEvent(store, { kind: "UserPromptSubmit", sessionId: "A", title: "T" });
   state.applyEvent(store, { kind: "Stop", sessionId: "A", body: "done" });
-  const first = store.sessions.get("A").completedAt;
+  const first = store.sessions.get("A")!.completedAt;
   assert.ok(first > 0);
   state.applyEvent(store, { kind: "Stop", sessionId: "A", body: "done again" });
-  assert.equal(store.sessions.get("A").completedAt, first, "completedAt must not change on duplicate Stop");
+  assert.equal(store.sessions.get("A")!.completedAt, first, "completedAt must not change on duplicate Stop");
 });

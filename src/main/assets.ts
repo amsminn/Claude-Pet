@@ -1,4 +1,3 @@
-"use strict";
 /**
  * Asset loader (component ④) — discovers + loads Codex-compatible pets from
  * `~/.codex/pets/<slug>/`. NO electron, NO image decoding here: this module
@@ -15,60 +14,40 @@
  * spritesheetPath); `kind` is an ecosystem extension kept as grouping meta
  * only and the proposed `animation` block is ignored here (docs/02 §2.1-2.3).
  */
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const { pathToFileURL } = require("node:url");
-const C = require("../shared/constants");
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { pathToFileURL } from "node:url";
+import * as C from "../shared/constants";
+import type { PetMeta, PetAsset } from "../shared/types";
 
 const PETS_ROOT = path.join(os.homedir(), ".codex", "pets");
 
 /**
- * @typedef {Object} PetMeta
- * @property {string} id            pet.json.id (store / select key)
- * @property {string} displayName   UI name (falls back to id)
- * @property {string} description   UI helper text
- * @property {string} [kind]        grouping meta only — never affects render
- * @property {string} slug          discovery folder name
- */
-
-/**
- * @typedef {Object} PetAsset
- * @property {PetMeta} meta
- * @property {string} spritesheetPath  validated ABSOLUTE path to the image
- * @property {string} spritesheetUrl   file:// URL for the renderer <img>/canvas
- * @property {number} frameW           192 (constant)
- * @property {number} frameH           208 (constant)
- * @property {{cols:number, rows:number, width:number, height:number}} atlas
- *           released-app contract geometry; renderer derives actuals from pixels
- */
-
-/**
- * @typedef {PetMeta & {_dir:string, _spritesheetPath:string}} InternalMeta
  * Internal flavour carried only inside this module so loadPet can resolve the
  * image path. The `_`-prefixed fields are stripped before any value leaves the
  * module (publicMeta()).
  */
+type InternalMeta = PetMeta & { _dir: string; _spritesheetPath: string };
 
 /**
  * Discover installed pets under the pets root. Each immediate subdirectory with
  * a readable, valid pet.json yields one PetMeta. Never throws; returns [] if
  * the root is missing or unreadable. (docs/02 §1, §5.3, §6.1)
  *
- * @param {string} [root=PETS_ROOT]  override the scan root (tests / future
- *        multi-root). Defaults to ~/.codex/pets so the documented no-arg call
- *        keeps working.
- * @returns {PetMeta[]}  public metas in discovery order, first-wins on dup id
+ * @param root  override the scan root (tests / future multi-root). Defaults to
+ *        ~/.codex/pets so the documented no-arg call keeps working.
+ * @returns public metas in discovery order, first-wins on dup id
  */
-function discoverPets(root = PETS_ROOT) {
-  let entries;
+function discoverPets(root: string = PETS_ROOT): PetMeta[] {
+  let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(root, { withFileTypes: true });
   } catch {
     return []; // root absent / unreadable -> no pets (main uses fallback pet)
   }
-  const out = [];
-  const seenIds = new Set();
+  const out: PetMeta[] = [];
+  const seenIds = new Set<string>();
   for (const ent of entries) {
     if (!isDirEntry(ent, root)) continue;
     const slug = ent.name;
@@ -85,11 +64,8 @@ function discoverPets(root = PETS_ROOT) {
  * Treat an entry as a pet directory if it is a directory, or a symlink that
  * resolves to a directory. readdir(withFileTypes) reports symlinks as
  * isSymbolicLink(), so stat through them. Never throws.
- * @param {fs.Dirent} ent
- * @param {string} root
- * @returns {boolean}
  */
-function isDirEntry(ent, root) {
+function isDirEntry(ent: fs.Dirent, root: string): boolean {
   if (ent.isDirectory()) return true;
   if (ent.isSymbolicLink()) {
     try {
@@ -106,12 +82,11 @@ function isDirEntry(ent, root) {
  * Released fields only (id, displayName, description, spritesheetPath); `kind`
  * is carried as grouping meta; every other field — including a proposed
  * `animation` block — is ignored (forward-compatible). (docs/02 §2.1, §6.1)
- * @param {string} dir   absolute pet directory
- * @param {string} slug  folder name (discovery key)
- * @returns {?InternalMeta}
+ * @param dir   absolute pet directory
+ * @param slug  folder name (discovery key)
  */
-function readPetMeta(dir, slug) {
-  let raw;
+function readPetMeta(dir: string, slug: string): InternalMeta | null {
+  let raw: any;
   try {
     raw = JSON.parse(fs.readFileSync(path.join(dir, "pet.json"), "utf8"));
   } catch {
@@ -141,11 +116,9 @@ function readPetMeta(dir, slug) {
 /**
  * Strip the internal `_`-prefixed resolution fields, leaving the contract
  * PetMeta shape ({id, displayName, description, kind?, slug}).
- * @param {InternalMeta} meta
- * @returns {PetMeta}
  */
-function publicMeta(meta) {
-  const out = {
+function publicMeta(meta: InternalMeta): PetMeta {
+  const out: PetMeta = {
     id: meta.id,
     displayName: meta.displayName,
     description: meta.description,
@@ -163,11 +136,10 @@ function publicMeta(meta) {
  * shared constants; the renderer derives the actual cols/rows from the decoded
  * pixels and runs autoDetectFrames (docs/02 §5.2, §7). Never throws.
  *
- * @param {string} slug  discovery folder name (or pet id)
- * @param {string} [root=PETS_ROOT]  override the pets root (tests)
- * @returns {?PetAsset}
+ * @param slug  discovery folder name (or pet id)
+ * @param root  override the pets root (tests)
  */
-function loadPet(slug, root = PETS_ROOT) {
+function loadPet(slug: unknown, root: string = PETS_ROOT): PetAsset | null {
   if (!isNonEmptyString(slug)) return null;
 
   let meta = readPetMeta(path.join(root, slug), slug);
@@ -207,12 +179,9 @@ function loadPet(slug, root = PETS_ROOT) {
 /**
  * Scan the root for a pet whose id matches `id`, returning its InternalMeta
  * (with resolution fields) or null. First-wins on duplicate id. Never throws.
- * @param {string} id
- * @param {string} root
- * @returns {?InternalMeta}
  */
-function findById(id, root) {
-  let entries;
+function findById(id: string, root: string): InternalMeta | null {
+  let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(root, { withFileTypes: true });
   } catch {
@@ -230,11 +199,8 @@ function findById(id, root) {
  * realpathSync, but never throws — returns `fallback` (default: the input) when
  * the path does not exist yet. Keeps the path-escape guard symlink-aware while
  * still rejecting non-existent escapes.
- * @param {string} p
- * @param {string} [fallback=p]
- * @returns {string}
  */
-function realpathOr(p, fallback = p) {
+function realpathOr(p: string, fallback: string = p): string {
   try {
     return fs.realpathSync(p);
   } catch {
@@ -242,13 +208,8 @@ function realpathOr(p, fallback = p) {
   }
 }
 
-/** @param {*} v @returns {boolean} */
-function isNonEmptyString(v) {
+function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.length > 0;
 }
 
-module.exports = {
-  PETS_ROOT,
-  discoverPets,
-  loadPet,
-};
+export { PETS_ROOT, discoverPets, loadPet };

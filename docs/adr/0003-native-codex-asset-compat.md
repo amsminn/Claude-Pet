@@ -1,53 +1,53 @@
-# 0003. Codex 펫 에셋을 네이티브로 로드한다
+# 0003. Load Codex Pet Assets Natively
 
-- 상태: 채택됨
-- 날짜: 2026-06-14
-- 관련: [02-asset-compat/codex-pet-assets.md](../02-asset-compat/codex-pet-assets.md), [04-pet-ui/pet-and-cards.md](../04-pet-ui/pet-and-cards.md), [06-product/strategy.md](../06-product/strategy.md)
+- Status: Accepted
+- Date: 2026-06-14
+- Related: [02-asset-compat/codex-pet-assets.md](../02-asset-compat/codex-pet-assets.md), [04-pet-ui/pet-and-cards.md](../04-pet-ui/pet-and-cards.md), [06-product/strategy.md](../06-product/strategy.md)
 
 ## Context
 
-Claude-Pet의 차별화는 "새 펫 앱"이 아니라 **Codex pets for Claude Code**다. 사용자가 이미 `~/.codex/pets/<slug>/`에 설치한 `pet.json`과 `spritesheet.webp`를 그대로 쓸 수 있어야 한다.
+Claude-Pet's differentiator is not "a new pet app" but **Codex pets for Claude Code**. Users must be able to use the `pet.json` and `spritesheet.webp` they have already installed under `~/.codex/pets/<slug>/`, as-is.
 
-`refs/sample-pet/`의 실제 `nezu` asset은 다음을 확인시켜 준다.
+The real `nezu` asset in `refs/sample-pet/` confirms the following.
 
-- `pet.json` metadata와 `spritesheet.webp`가 한 디렉터리에 있다.
-- spritesheet는 1536x1872, 8열 x 9행 atlas, frame 192x208px이다 `확인`.
-- Codex renderer는 비공개이며, 공개적으로 확인되는 것은 asset format과 app-level pet 기능이다.
+- `pet.json` metadata and `spritesheet.webp` live in the same directory.
+- The spritesheet is 1536x1872, an 8-column x 9-row atlas, with 192x208px frames `Verified`.
+- The Codex renderer is closed-source; what is publicly confirmable is the asset format and the app-level pet functionality.
 
 ## Decision
 
-Claude-Pet은 Codex pet asset을 **변환 없이 네이티브 로드**한다.
+Claude-Pet loads Codex pet assets **natively, without conversion**.
 
-구체적으로:
+Specifically:
 
-- 기본 검색 경로는 `~/.codex/pets/<slug>/`.
-- 필수 파일은 `pet.json`과 `spritesheet.webp`.
-- loader는 `pet.json`을 parsing/validation하고 atlas frame size를 실제 이미지에서 검증한다.
-- 자체 format으로 복사·변환·packaging하지 않는다.
-- optional field는 forward-compatible하게 보존하고, 알 수 없는 field는 무시한다.
+- The default search path is `~/.codex/pets/<slug>/`.
+- The required files are `pet.json` and `spritesheet.webp`.
+- The loader parses/validates `pet.json` and verifies the atlas frame size against the actual image.
+- We do not copy, convert, or package into our own format.
+- Optional fields are preserved forward-compatibly, and unknown fields are ignored.
 
 ## Consequences
 
-**좋은 점**
+**Upsides**
 
-- Petdex/Codex pet ecosystem을 콘텐츠로 흡수한다.
-- 사용자에게 "이미 산/설치한 pet이 그대로 보인다"는 강한 가치가 생긴다.
-- asset pipeline을 새로 만들 필요가 없다.
+- We absorb the Petdex/Codex pet ecosystem as content.
+- Users get the strong value of "the pet I already bought/installed shows up as-is."
+- No need to build a new asset pipeline.
 
-**나쁜 점·트레이드오프**
+**Downsides and tradeoffs**
 
-- Codex renderer가 비공개라 animation semantics는 관찰 기반으로 재구현해야 한다.
-- future `pet.json` schema change에 대비한 tolerant parser가 필요하다.
-- 모든 community asset이 같은 품질/치수를 지킨다는 보장이 없으므로 validator와 fallback UI가 필요하다.
+- Because the Codex renderer is closed-source, animation semantics must be reimplemented from observation.
+- A tolerant parser is needed to guard against future `pet.json` schema changes.
+- There is no guarantee that every community asset keeps the same quality/dimensions, so a validator and a fallback UI are needed.
 
 ## Alternatives considered
 
-- **자체 pet format으로 import/convert**: 구현 자유도는 높지만 Codex compatibility라는 핵심 가치를 훼손한다.
-- **범용 멀티-에이전트 펫 format 채택**: multi-agent ecosystem에는 좋지만 Codex pet fidelity가 약해진다.
-- **Codex renderer protocol 연동**: 공개 schema가 없어 현재는 불가능하다.
+- **Import/convert into our own pet format**: High implementation freedom, but undermines the core value of Codex compatibility.
+- **Adopt a generic multi-agent pet format**: Good for a multi-agent ecosystem, but weakens Codex pet fidelity.
+- **Integrate with the Codex renderer protocol**: Currently impossible, since there is no public schema.
 
 ## Validation
 
-- `refs/sample-pet/`를 fixture로 loader test를 만든다.
-- 실제 `~/.codex/pets/` 경로가 없을 때 sample fallback을 제공한다.
-- atlas 치수 mismatch, 누락 파일, invalid JSON을 각각 error card가 아닌 settings/loader error로 표시한다.
+- Build loader tests using `refs/sample-pet/` as a fixture.
+- Provide a sample fallback when the actual `~/.codex/pets/` path does not exist.
+- Surface atlas dimension mismatch, missing files, and invalid JSON as settings/loader errors rather than as error cards.

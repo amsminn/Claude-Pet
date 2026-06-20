@@ -1,140 +1,142 @@
-# 아키텍처 개요 (Architecture Overview)
+# Architecture Overview
 
-> 근거: 공식 [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks)·[settings](https://docs.anthropic.com/en/docs/claude-code/settings) 문서, [`refs/codex-pet-ux-teardown.md`](../../refs/codex-pet-ux-teardown.md)
-> 관련: [ADR-0001](../adr/0001-electron-over-tauri.md), [ADR-0002](../adr/0002-backend-clean-room.md), [05-claude-integration](../05-claude-integration/claude-code-hooks.md)
+> Basis: official [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) and [settings](https://docs.anthropic.com/en/docs/claude-code/settings) docs, [`refs/codex-pet-ux-teardown.md`](../../refs/codex-pet-ux-teardown.md)
+> Related: [ADR-0001](../adr/0001-electron-over-tauri.md), [ADR-0002](../adr/0002-backend-clean-room.md), [05-claude-integration](../05-claude-integration/claude-code-hooks.md)
 
-**Electron 단일 프로세스** 앱이다. Claude Code는 우리가 제어하지 않는 외부 프로세스이므로, 연동은
-모두 **느슨하고 무해한** 단방향 신호(훅 → 로컬 서버)로 받고, 답장만 **블로킹 훅 응답**이라는 공식
-역채널로 돌려보낸다. 백엔드(훅·서버·권한)는 **공식 Claude Code 훅/SDK 문서**를 근거로 clean-room 구현하고, 역량은
-**Codex 충실 UI**(펫+카드)에 집중한다.
+This is a **single-process Electron** app. Claude Code is an external process we don't control, so all
+integration arrives as **loose, harmless** one-way signals (hook → local server), and replies are sent
+back only through the official back-channel of a **blocking hook response**. The backend (hooks, server,
+permissions) is a clean-room implementation grounded in the **official Claude Code hooks/SDK docs**, while
+our differentiating effort goes into a **Codex-faithful UI** (pet + cards).
 
-## 시스템 컨텍스트 (Level 1)
+## System Context (Level 1)
 
 ```mermaid
 flowchart TB
-    user["개발자"]
-    subgraph cc["Claude Code 세션들 (터미널 N개)"]
+    user["Developer"]
+    subgraph cc["Claude Code sessions (N terminals)"]
         s1["claude #1"]
         s2["claude #2"]
     end
     pets[("~/.codex/pets/<br/>pet.json + spritesheet.webp")]
-    app["<b>Claude-Pet</b><br/>Electron 데스크탑 앱"]
+    app["<b>Claude-Pet</b><br/>Electron desktop app"]
 
-    user -->|"프롬프트 입력"| cc
-    cc -->|"훅 이벤트 (상태)"| app
-    app -->|"블로킹 훅 응답 (답장/권한)"| cc
-    pets -->|"네이티브 로드"| app
-    app -->|"플로팅 펫 + 카드 스택"| user
+    user -->|"prompt input"| cc
+    cc -->|"hook event (state)"| app
+    app -->|"blocking hook response (reply/permission)"| cc
+    pets -->|"native load"| app
+    app -->|"floating pet + card stack"| user
 ```
 
-## 컨테이너 (Level 2)
+## Containers (Level 2)
 
-배포 단위는 Electron 앱 하나. 내부는 6개 컴포넌트로 나뉘고, 각각 단일 책임을 갖는다.
+The deployment unit is a single Electron app. Internally it is split into 6 components, each with a single responsibility.
 
 ```mermaid
 flowchart TB
-    subgraph ccx["Claude Code (외부)"]
-        hookCmd["커맨드 훅<br/>(상태 이벤트)"]
-        hookHttp["블로킹 HTTP 훅<br/>(권한/답장)"]
-        jsonl[("트랜스크립트 JSONL<br/>~/.claude/projects/…")]
+    subgraph ccx["Claude Code (external)"]
+        hookCmd["command hook<br/>(state events)"]
+        hookHttp["blocking HTTP hook<br/>(permission/reply)"]
+        jsonl[("transcript JSONL<br/>~/.claude/projects/…")]
     end
 
     subgraph app["Claude-Pet (Electron)"]
-        server["<b>① 로컬 서버</b><br/>상태 POST 수신<br/>권한요청 hold/resolve"]
-        store["<b>② 세션 스토어</b><br/>session_id → {제목,본문,상태,터미널ID}"]
-        tailer["<b>③ 트랜스크립트 테일러</b><br/>마지막 어시스턴트 텍스트 → 카드 본문"]
-        loader["<b>④ 에셋 로더</b><br/>pet.json + atlas 파싱"]
-        petwin["<b>⑤ 펫 창</b><br/>투명·always-on-top·click-through<br/>canvas 스프라이트"]
-        cards["<b>⑥ 카드 스택 UI</b><br/>Codex 픽셀 복제<br/>제목·본문·아이콘·답장·펼치기·×·+N"]
+        server["<b>① Local server</b><br/>receives state POSTs<br/>holds/resolves permission requests"]
+        store["<b>② Session store</b><br/>session_id → {title,body,state,terminalID}"]
+        tailer["<b>③ Transcript tailer</b><br/>last assistant text → card body"]
+        loader["<b>④ Asset loader</b><br/>parses pet.json + atlas"]
+        petwin["<b>⑤ Pet window</b><br/>transparent · always-on-top · click-through<br/>canvas sprites"]
+        cards["<b>⑥ Card stack UI</b><br/>Codex pixel replica<br/>title·body·icon·reply·expand·×·+N"]
     end
 
-    hookCmd -->|"POST 상태 (fire-and-forget)"| server
-    hookHttp -->|"POST 권한 (블로킹)"| server
+    hookCmd -->|"POST state (fire-and-forget)"| server
+    hookHttp -->|"POST permission (blocking)"| server
     jsonl -.->|"tail read"| tailer
     server --> store
     tailer --> store
     loader --> petwin
     store --> petwin
     store --> cards
-    cards -->|"사용자 답장"| server
-    server -->|"decision/feedback 응답"| hookHttp
+    cards -->|"user reply"| server
+    server -->|"decision/feedback response"| hookHttp
 ```
 
-**컴포넌트 책임**
+**Component responsibilities**
 
-| # | 컴포넌트 | 책임 | 출처 |
+| # | Component | Responsibility | Source |
 |---|---|---|---|
-| ① | 로컬 서버 | 상태 POST 수신, 권한 훅을 잡아뒀다 사용자 결정으로 응답 | 신규(공식 hook 문서 기준) |
-| ② | 세션 스토어 | `session_id`=카드 1개. 다세션→스택. 상태·제목·본문·터미널ID 보관 | 신규 |
-| ③ | 트랜스크립트 테일러 | Stop 시 JSONL 끝부분에서 마지막 어시스턴트 텍스트 추출(카드 본문) | 신규(공식 transcript 스키마) |
-| ④ | 에셋 로더 | `~/.codex/pets/<slug>/{pet.json,spritesheet.webp}` 파싱·검증 | 신규([02](../02-asset-compat/codex-pet-assets.md)) |
-| ⑤ | 펫 창 | 투명/클릭통과/always-on-top 창 + atlas 8×9 프레임 애니메이션 | 신규 |
-| ⑥ | 카드 스택 UI | Codex 카드 픽셀 복제 — 핵심 차별 가치 | 신규([04](../04-pet-ui/pet-and-cards.md)) |
+| ① | Local server | Receives state POSTs; holds permission hooks and responds with the user's decision | New (per official hook docs) |
+| ② | Session store | `session_id` = one card. Multiple sessions → stack. Holds state, title, body, terminal ID | New |
+| ③ | Transcript tailer | On Stop, extracts the last assistant text from the tail of the JSONL (card body) | New (official transcript schema) |
+| ④ | Asset loader | Parses and validates `~/.codex/pets/<slug>/{pet.json,spritesheet.webp}` | New ([02](../02-asset-compat/codex-pet-assets.md)) |
+| ⑤ | Pet window | Transparent / click-through / always-on-top window + atlas 8×9 frame animation | New |
+| ⑥ | Card stack UI | Pixel replica of Codex cards — the core differentiator | New ([04](../04-pet-ui/pet-and-cards.md)) |
 
-## 핵심 데이터 흐름
+## Key data flows
 
-### 흐름 1 — 관찰 (상태 → 펫·카드)
+### Flow 1 — Observe (state → pet/cards)
 
-가장 빈번한 경로. Claude Code가 이벤트를 쏘면 펫/카드가 즉시 갱신된다.
+The most frequent path. When Claude Code emits an event, the pet/cards update immediately.
 
 ```mermaid
 sequenceDiagram
     participant CC as Claude Code
-    participant Hook as 커맨드 훅
-    participant Srv as 로컬 서버 ①
-    participant Store as 세션 스토어 ②
-    participant Tail as 테일러 ③
-    participant UI as 펫·카드 ⑤⑥
+    participant Hook as command hook
+    participant Srv as local server ①
+    participant Store as session store ②
+    participant Tail as tailer ③
+    participant UI as pet/cards ⑤⑥
 
-    CC->>Hook: 이벤트 (UserPromptSubmit/PreToolUse/Stop…)
-    Hook->>Srv: POST 상태 JSON (100ms timeout, fire-and-forget)
-    Note over Hook,CC: 펫이 꺼져있으면 timeout → exit 0, CC 영향 0
-    Srv->>Store: state·session_title 갱신 (session_id)
+    CC->>Hook: event (UserPromptSubmit/PreToolUse/Stop…)
+    Hook->>Srv: POST state JSON (100ms timeout, fire-and-forget)
+    Note over Hook,CC: if the pet is off → timeout → exit 0, zero impact on CC
+    Srv->>Store: update state·session_title (session_id)
     opt event == Stop
         Hook->>Tail: transcript_path
-        Tail->>Store: 마지막 어시스턴트 텍스트 → 카드 본문
+        Tail->>Store: last assistant text → card body
     end
-    Store->>UI: 펫 애니메이션 + 카드 상태 갱신
+    Store->>UI: pet animation + card state update
 ```
 
-### 흐름 2 — 답장 (블로킹 훅 역채널)
+### Flow 2 — Reply (blocking hook back-channel)
 
-Claude Code가 권한/결정을 물을 때만 열리는 동기 경로. 키 주입 없이 공식 채널로 답이 돌아간다.
+A synchronous path that opens only when Claude Code asks for a permission/decision. The answer returns
+through the official channel without any key injection.
 
 ```mermaid
 sequenceDiagram
     participant CC as Claude Code
-    participant Hook as 블로킹 HTTP 훅
-    participant Srv as 로컬 서버 ①
-    participant UI as 카드 UI ⑥
-    participant User as 사용자
+    participant Hook as blocking HTTP hook
+    participant Srv as local server ①
+    participant UI as card UI ⑥
+    participant User as User
 
-    CC->>Hook: PermissionRequest (블로킹)
-    Hook->>Srv: POST 권한요청 (응답 대기)
-    Srv->>UI: 해당 카드에 답장/승인 affordance 표시
-    User->>UI: allow/deny + (선택) 메시지 입력
-    UI->>Srv: 사용자 결정
+    CC->>Hook: PermissionRequest (blocking)
+    Hook->>Srv: POST permission request (await response)
+    Srv->>UI: show reply/approve affordance on the relevant card
+    User->>UI: allow/deny + (optional) message input
+    UI->>Srv: user decision
     Srv->>Hook: { hookSpecificOutput: { hookEventName:"PermissionRequest", decision } }
-    Hook->>CC: 결정 전달 → 세션 진행
-    Note over Srv,Hook: 무응답/DND/펫 부재 → no-decision fallback → CC 네이티브 프롬프트 확인 필요
+    Hook->>CC: deliver decision → session proceeds
+    Note over Srv,Hook: no response/DND/pet absent → no-decision fallback → must confirm via CC native prompt
 ```
 
-## 비기능 요구사항 (NFR)
+## Non-functional requirements (NFR)
 
-| 분류 | 요구 | 목표(추정) | 근거 |
+| Category | Requirement | Target (Inferred) | Basis |
 |---|---|---|---|
-| **무해성** | 펫 부재·지연 시 CC 영향 | 0 | 상태 훅 fire-and-forget·100ms timeout `확인`([05](../05-claude-integration/claude-code-hooks.md)) |
-| **반응성** | 이벤트→펫 반영 | 체감 즉시(<200ms 목표) | 로컬 서버 직수신 |
-| **답장 안전** | 펫 무응답 시 | CC 네이티브 프롬프트로 폴백 | 블로킹 훅 no-decision smoke test 필요([05](../05-claude-integration/claude-code-hooks.md)) |
-| **충실도** | Codex 대비 시각 차이 | 픽셀 단위 일치 지향 | [`refs/`](../../refs/README.md) 화면 기준 |
-| **호환성** | Codex 펫 에셋 | 변환 0·네이티브 | `~/.codex/pets/` 직접 로드([02](../02-asset-compat/codex-pet-assets.md)) |
-| **이식성** | macOS→Win/Linux | 재작성 없이 | Electron 단일 코드베이스([ADR-0001](../adr/0001-electron-over-tauri.md)) |
-| **성능** | 유휴 시 자원 | 가벼움 | idle 시 애니메이션 프레임 throttle |
+| **Harmlessness** | Impact on CC when pet is absent/delayed | 0 | State hook is fire-and-forget with 100ms timeout `Verified` ([05](../05-claude-integration/claude-code-hooks.md)) |
+| **Responsiveness** | event → pet reflection | perceptibly instant (<200ms target) | local server receives directly |
+| **Reply safety** | when pet does not respond | falls back to CC native prompt | blocking-hook no-decision smoke test required ([05](../05-claude-integration/claude-code-hooks.md)) |
+| **Fidelity** | visual difference vs. Codex | aims for pixel-level match | per the screens in [`refs/`](../../refs/README.md) |
+| **Compatibility** | Codex pet assets | zero conversion · native | loads `~/.codex/pets/` directly ([02](../02-asset-compat/codex-pet-assets.md)) |
+| **Portability** | macOS → Win/Linux | without rewrite | single Electron codebase ([ADR-0001](../adr/0001-electron-over-tauri.md)) |
+| **Performance** | resources when idle | lightweight | throttle animation frames when idle |
 
-## 구현 경계 (clean-room)
+## Implementation boundary (clean-room)
 
-백엔드는 **공식 1차 문서에서 도출**하고, 차별 가치는 **새 UI/로더**에 집중한다([ADR-0002](../adr/0002-backend-clean-room.md)).
+The backend is **derived from official first-party docs**, and the differentiating value is concentrated in **new UI/loader** ([ADR-0002](../adr/0002-backend-clean-room.md)).
 
-| 공식 문서 기준 구현 (백엔드) | 신규 (차별 가치) |
+| Implemented per official docs (backend) | New (differentiating value) |
 |---|---|
-| 훅 이벤트→상태 매핑·POST, 로컬 서버, 권한 브릿지, 트랜스크립트 테일·세션 식별 (모두 공식 hooks/settings 문서) | **Codex 충실 펫 창 + 카드 스택 UI**, 에셋 로더의 Codex atlas 충실 렌더 |
+| Hook event → state mapping/POST, local server, permission bridge, transcript tail and session identification (all from official hooks/settings docs) | **Codex-faithful pet window + card stack UI**, Codex-atlas-faithful rendering in the asset loader |

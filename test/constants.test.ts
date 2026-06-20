@@ -1,7 +1,6 @@
-"use strict";
-const { test } = require("node:test");
-const assert = require("node:assert/strict");
-const C = require("../src/shared/constants");
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import * as C from "../src/shared/constants";
 
 test("atlas geometry is the released-app contract (8x9, 192x208)", () => {
   assert.equal(C.FRAME_W, 192);
@@ -51,7 +50,12 @@ test("protocol tag is claude-pet.v1", () => {
 });
 
 test("constants are frozen (single source of truth)", () => {
-  assert.ok(Object.isFrozen(C));
+  // Named ESM exports replace the old single frozen object — assert the actual
+  // constant objects are immutable (the namespace wrapper isn't a reliable proxy
+  // for that under the tsx/esbuild loader).
+  assert.ok(Object.isFrozen(C.ATLAS));
   assert.ok(Object.isFrozen(C.ROW));
+  assert.ok(Object.isFrozen(C.ROW_ANIM));
+  assert.ok(Object.isFrozen(C.EVENT_TO_STATE));
   assert.ok(Object.isFrozen(C.IPC));
 });

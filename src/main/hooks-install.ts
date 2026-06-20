@@ -1,4 +1,3 @@
-"use strict";
 /**
  * Hook installer — registers Claude-Pet's hooks into a Claude Code
  * settings.json. NO electron. Idempotent, preserves the user's existing hooks,
@@ -16,9 +15,9 @@
  * entries first, so the file converges to a single, current registration and
  * `changed` reflects whether anything actually moved.
  */
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
 const DEFAULT_SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json");
 const MARK = "claude-pet"; // tag on every hook group we own (idempotency / uninstall)
@@ -43,13 +42,13 @@ const STATE_EVENTS = [
 
 /**
  * Install Claude-Pet hooks into settings.json (idempotent).
- * @param {Object} opts
- * @param {number} opts.port                    local server port
- * @param {string} [opts.host="127.0.0.1"]
- * @param {string} [opts.settingsPath]          defaults to ~/.claude/settings.json
- * @returns {{settingsPath:string, changed:boolean, settings:Object}}
+ * @param opts.port          local server port
+ * @param opts.host          defaults to "127.0.0.1"
+ * @param opts.settingsPath  defaults to ~/.claude/settings.json
  */
-function installHooks(opts = {}) {
+function installHooks(
+  opts: { port?: number; host?: string; settingsPath?: string } = {}
+): { settingsPath: string; changed: boolean; settings: any } {
   const settingsPath = opts.settingsPath || DEFAULT_SETTINGS_PATH;
   const host = opts.host || "127.0.0.1";
   const port = opts.port;
@@ -97,11 +96,11 @@ function installHooks(opts = {}) {
 
 /**
  * Remove only Claude-Pet hooks; leave foreign hooks untouched (docs/05 §2).
- * @param {Object} opts
- * @param {string} [opts.settingsPath]
- * @returns {{settingsPath:string, changed:boolean, settings:Object}}
+ * @param opts.settingsPath  defaults to ~/.claude/settings.json
  */
-function uninstallHooks(opts = {}) {
+function uninstallHooks(
+  opts: { settingsPath?: string } = {}
+): { settingsPath: string; changed: boolean; settings: any } {
   const settingsPath = opts.settingsPath || DEFAULT_SETTINGS_PATH;
   const settings = readSettings(settingsPath);
   const changed = stripOurHooks(settings);
@@ -115,11 +114,8 @@ function uninstallHooks(opts = {}) {
 
 /**
  * Append a group to settings.hooks[event], creating the array if needed.
- * @param {Object} hooks
- * @param {string} event
- * @param {Object} group
  */
-function appendGroup(hooks, event, group) {
+function appendGroup(hooks: any, event: string, group: any): void {
   if (!Array.isArray(hooks[event])) hooks[event] = [];
   hooks[event].push(group);
 }
@@ -127,10 +123,9 @@ function appendGroup(hooks, event, group) {
 /**
  * Remove every group tagged with our MARK, dropping now-empty event arrays.
  * Foreign groups (no `_owner`, or a different owner) are preserved verbatim.
- * @param {Object} settings
- * @returns {boolean} true if anything was removed
+ * @returns true if anything was removed
  */
-function stripOurHooks(settings) {
+function stripOurHooks(settings: any): boolean {
   if (!settings.hooks || typeof settings.hooks !== "object" || Array.isArray(settings.hooks)) {
     return false;
   }
@@ -138,7 +133,7 @@ function stripOurHooks(settings) {
   for (const event of Object.keys(settings.hooks)) {
     const arr = settings.hooks[event];
     if (!Array.isArray(arr)) continue;
-    const kept = arr.filter((g) => !(g && g._owner === MARK));
+    const kept = arr.filter((g: any) => !(g && g._owner === MARK));
     if (kept.length !== arr.length) changed = true;
     if (kept.length === 0) delete settings.hooks[event];
     else settings.hooks[event] = kept;
@@ -147,11 +142,10 @@ function stripOurHooks(settings) {
 }
 
 /**
- * @param {string} p
- * @returns {Object} parsed settings, or {} if absent/invalid
+ * @returns parsed settings, or {} if absent/invalid
  */
-function readSettings(p) {
-  let raw;
+function readSettings(p: string): any {
+  let raw: string;
   try {
     raw = fs.readFileSync(p, "utf8");
   } catch {
@@ -165,11 +159,7 @@ function readSettings(p) {
   }
 }
 
-/**
- * @param {string} p
- * @param {Object} settings
- */
-function writeSettings(p, settings) {
+function writeSettings(p: string, settings: any): void {
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, JSON.stringify(settings, null, 2) + "\n", "utf8");
 }
@@ -177,24 +167,22 @@ function writeSettings(p, settings) {
 /**
  * Order-insensitive serialization used only to detect a real change (so
  * `changed` is honest and idempotent re-installs don't rewrite the file).
- * @param {*} value
- * @returns {string}
  */
-function stableStringify(value) {
+function stableStringify(value: any): string {
   return JSON.stringify(sortKeys(value));
 }
 
-function sortKeys(value) {
+function sortKeys(value: any): any {
   if (Array.isArray(value)) return value.map(sortKeys);
   if (value && typeof value === "object") {
-    const out = {};
+    const out: any = {};
     for (const k of Object.keys(value).sort()) out[k] = sortKeys(value[k]);
     return out;
   }
   return value;
 }
 
-module.exports = {
+export {
   DEFAULT_SETTINGS_PATH,
   STATE_EVENTS,
   installHooks,

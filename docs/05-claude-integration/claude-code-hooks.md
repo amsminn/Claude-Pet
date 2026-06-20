@@ -1,45 +1,45 @@
-# Claude Code 연동: 훅·로컬 서버 프로토콜
+# Claude Code Integration: Hooks and Local Server Protocol
 
-> 근거: Anthropic 공식 [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) · [settings](https://docs.anthropic.com/en/docs/claude-code/settings), OpenAI 공식 [Codex app settings](https://developers.openai.com/codex/app/settings) · [app commands](https://developers.openai.com/codex/app/commands) · [hooks](https://developers.openai.com/codex/hooks) · [MCP](https://developers.openai.com/codex/mcp) · [app server](https://developers.openai.com/codex/app-server)
-> 관련: [architecture overview](../01-architecture/overview.md), [state machine](../03-state-engine/state-machine.md), [ADR-0004](../adr/0004-reply-via-blocking-hook.md)
+> Basis: Anthropic official [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) · [settings](https://docs.anthropic.com/en/docs/claude-code/settings), OpenAI official [Codex app settings](https://developers.openai.com/codex/app/settings) · [app commands](https://developers.openai.com/codex/app/commands) · [hooks](https://developers.openai.com/codex/hooks) · [MCP](https://developers.openai.com/codex/mcp) · [app server](https://developers.openai.com/codex/app-server)
+> Related: [architecture overview](../01-architecture/overview.md), [state machine](../03-state-engine/state-machine.md), [ADR-0004](../adr/0004-reply-via-blocking-hook.md)
 
-Claude-Pet은 Claude Code를 패치하지 않는다. Claude Code의 공식 hook surface를 통해 **관찰은 command hook**, **답장은 blocking HTTP `PermissionRequest` hook**으로 처리한다. 이 구조의 목표는 두 가지다.
+Claude-Pet does not patch Claude Code. Through Claude Code's official hook surface, it handles **observation via a command hook** and **replies via a blocking HTTP `PermissionRequest` hook**. This design has two goals:
 
-1. 펫이 꺼져 있어도 Claude Code가 느려지거나 멈추지 않는다.
-2. 인라인 답장은 터미널 키 주입이 아니라 열린 hook 응답으로만 전달한다.
+1. Claude Code does not slow down or stall even when the pet is turned off.
+2. Inline replies are delivered solely through the open hook response, never through terminal key injection.
 
-## 1. 공식 surface 확인
+## 1. Confirming the official surface
 
-| 영역 | 확인 내용 | 신뢰도 |
+| Area | What's confirmed | Credibility |
 |---|---|---|
-| Claude Code hooks | settings JSON에서 event별 matcher/hook을 구성한다. command hook과 HTTP hook이 공식 경로다. | `확인` |
-| Claude Code HTTP hooks | HTTP endpoint로 hook payload를 POST한다. 2xx JSON body는 hook output으로 해석된다. | `확인` |
-| Claude Code common payload | 이벤트가 `session_id`/`transcript_path`/`cwd` 등을 제공한다는 **정확한 공통 필드 집합 주장은 과명세로 반박됨(0-3)**. 이벤트별로 실제 페이로드를 캡처해 필드 존재를 확인할 것. | `추정`(경험적 캡처 필요) |
-| `PermissionRequest` output | event-specific output으로 `hookSpecificOutput.hookEventName="PermissionRequest"` + 중첩 `decision.behavior(allow\|deny)`를 반환. **인터랙티브 전용**(`-p` 미발화 → 헤드리스는 `PreToolUse`의 평면 `permissionDecision`). | `확인` |
-| OpenAI Codex pets | Codex App은 Settings > Appearance > Pets와 `/pet` command를 공식 문서화한다. | `확인` |
-| OpenAI app server | Codex App Server는 JSON-RPC 2.0과 schema generation을 공식 문서화한다. | `확인` |
-| OpenAI pet runtime schema | 공개 문서에서 pet overlay의 내부 card/state protocol schema는 찾지 못했다. | `확인`(부재 확인) |
+| Claude Code hooks | Per-event matchers/hooks are configured in the settings JSON. Command hooks and HTTP hooks are the official paths. | `Verified` |
+| Claude Code HTTP hooks | The hook payload is POSTed to an HTTP endpoint. A 2xx JSON body is interpreted as hook output. | `Verified` |
+| Claude Code common payload | The claim that every event provides an **exact common field set** such as `session_id`/`transcript_path`/`cwd` was **refuted as over-specification (0-3)**. Capture the actual payload per event and confirm field presence. | `Inferred` (empirical capture required) |
+| `PermissionRequest` output | Returns an event-specific output with `hookSpecificOutput.hookEventName="PermissionRequest"` plus a nested `decision.behavior(allow\|deny)`. **Interactive only** (not emitted under `-p` → headless uses the flat `permissionDecision` of `PreToolUse`). | `Verified` |
+| OpenAI Codex pets | The Codex App officially documents Settings > Appearance > Pets and the `/pet` command. | `Verified` |
+| OpenAI app server | The Codex App Server officially documents JSON-RPC 2.0 and schema generation. | `Verified` |
+| OpenAI pet runtime schema | No public documentation of the pet overlay's internal card/state protocol schema was found. | `Verified` (absence confirmed) |
 
-OpenAI 쪽은 **비교 기준**이다. Codex가 pet UX와 app/server/hook/MCP surface를 문서화하지만, Claude-Pet이 Claude Code와 통신하는 실제 경로는 Anthropic Claude Code hooks다.
+The OpenAI side serves as a **point of comparison**. While Codex documents its pet UX and its app/server/hook/MCP surface, the actual path by which Claude-Pet communicates with Claude Code is the Anthropic Claude Code hooks.
 
-## 2. 설치 위치와 설정 원칙
+## 2. Installation location and configuration principles
 
-Claude-Pet installer는 기본적으로 사용자 settings에 hook을 등록한다.
+By default, the Claude-Pet installer registers hooks in the user settings.
 
-| 설정 | 값 |
+| Setting | Value |
 |---|---|
-| 대상 파일 | `~/.claude/settings.json` 우선. 프로젝트 단위 opt-in은 후속. |
-| state hook | command hook. 모든 관찰 event를 짧게 처리한다. |
-| permission hook | HTTP hook. `http://127.0.0.1:<port>/permission`으로 등록한다. |
-| allowlist | Anthropic settings의 HTTP hook allowlist에 localhost URL을 추가한다. |
-| timeout | state POST는 100ms 목표, permission은 사용자가 결정할 시간을 줄 만큼 길게 잡는다. |
-| uninstall | Claude-Pet이 추가한 matcher/hook만 제거한다. 사용자의 기존 hooks는 보존한다. |
+| Target file | `~/.claude/settings.json` first. Per-project opt-in comes later. |
+| state hook | Command hook. Handles every observation event briefly. |
+| permission hook | HTTP hook. Registered at `http://127.0.0.1:<port>/permission`. |
+| allowlist | Adds the localhost URL to the Anthropic settings HTTP hook allowlist. |
+| timeout | The state POST targets 100ms; the permission timeout is set long enough to give the user time to decide. |
+| uninstall | Removes only the matchers/hooks that Claude-Pet added. The user's existing hooks are preserved. |
 
-설정 쓰기는 idempotent해야 한다. 같은 hook을 중복 등록하지 않고, 포트·경로 변경 시 이전 항목을 정리한다.
+Writing settings must be idempotent. It must not register the same hook twice, and it cleans up prior entries when the port or path changes.
 
-## 3. 관찰 경로: command hook -> `/state`
+## 3. Observation path: command hook -> `/state`
 
-command hook은 Claude Code 이벤트 payload를 받아 로컬 서버로 상태를 보낸다. 이 POST는 **best-effort**다. 실패해도 hook은 `exit 0`으로 종료한다.
+The command hook receives the Claude Code event payload and sends state to the local server. This POST is **best-effort**. Even on failure, the hook exits with `exit 0`.
 
 ```mermaid
 sequenceDiagram
@@ -62,26 +62,26 @@ sequenceDiagram
 
 ### 3.1 Hook event mapping
 
-공식 Claude Code hook 이벤트에서 도출한 mapping을 기준으로 한다. 상태 의미와 atlas row는 [state-machine](../03-state-engine/state-machine.md)이 권위 문서다.
+The mapping derived from the official Claude Code hook events is the baseline. For state semantics and atlas rows, the [state-machine](../03-state-engine/state-machine.md) is the authoritative document.
 
-| Hook event | `PetState` | 비고 |
+| Hook event | `PetState` | Notes |
 |---|---|---|
-| `SessionStart` | `idle` | 세션 등록 |
-| `SessionEnd` | `sleeping` | 만료 후보 |
-| `UserPromptSubmit` | `thinking` | 카드 생성/갱신 |
-| `PreToolUse`, `PostToolUse` | `working` | spinner 유지 |
-| `PostToolUseFailure`, `StopFailure`, `ApiError` | `error` | 실패 |
-| `Stop` | `attention` 또는 `error` | transcript tail에서 API error entry를 발견하면 `error`로 승격 |
-| `SubagentStart` | `juggling` | 진행 상태 |
-| `SubagentStop` | `working` | 진행 상태 복귀 |
-| `PreCompact` | `sweeping` | compact 진행 |
-| `PostCompact` | `thinking` 또는 `idle` | 직전 상태 기반 |
-| `Notification`, `Elicitation` | `notification` | 사용자 주의 |
-| `WorktreeCreate` | `carrying` | 이벤트성 |
+| `SessionStart` | `idle` | Session registration |
+| `SessionEnd` | `sleeping` | Expiry candidate |
+| `UserPromptSubmit` | `thinking` | Create/update card |
+| `PreToolUse`, `PostToolUse` | `working` | Keep spinner |
+| `PostToolUseFailure`, `StopFailure`, `ApiError` | `error` | Failure |
+| `Stop` | `attention` or `error` | Promoted to `error` if an API error entry is found in the transcript tail |
+| `SubagentStart` | `juggling` | In-progress state |
+| `SubagentStop` | `working` | Return to in-progress state |
+| `PreCompact` | `sweeping` | Compaction in progress |
+| `PostCompact` | `thinking` or `idle` | Based on the prior state |
+| `Notification`, `Elicitation` | `notification` | Requires user attention |
+| `WorktreeCreate` | `carrying` | One-off event |
 
 ### 3.2 `/state` request body
 
-Claude-Pet 내부 protocol은 명시적으로 versioning한다.
+The Claude-Pet internal protocol is explicitly versioned.
 
 ```json
 {
@@ -93,7 +93,7 @@ Claude-Pet 내부 protocol은 명시적으로 versioning한다.
   "transcriptPath": "/Users/me/.claude/projects/.../session.jsonl",
   "state": "attention",
   "title": "Review PR #216",
-  "body": "마지막 assistant 텍스트",
+  "body": "last assistant text",
   "contextPct": 55.4,
   "terminal": {
     "sourcePid": 1234,
@@ -106,34 +106,34 @@ Claude-Pet 내부 protocol은 명시적으로 versioning한다.
 }
 ```
 
-| 필드 | 규칙 |
+| Field | Rule |
 |---|---|
-| `protocol` | breaking change 방지용. v1에서 시작한다. |
-| `event` | 원본 Claude Code hook event 이름. |
-| `sessionId` | Claude Code `session_id`. 카드의 primary key. |
-| `transcriptPath` | Claude Code `transcript_path`. Stop-time body 추출에 쓴다. |
-| `state` | hook script가 1차 산출한 `PetState`. 서버가 Stop edge case를 다시 검증해도 된다. |
-| `title` | `session_title` -> transcript title -> prompt 첫 줄 순서. secret redaction 필수. |
-| `body` | Stop에서만 채운다. 진행 중에는 비운다. |
-| `terminal` | idle 자유 입력 때 포커스만 하기 위한 식별자. 키 주입에는 쓰지 않는다. |
+| `protocol` | Guards against breaking changes. Starts at v1. |
+| `event` | The original Claude Code hook event name. |
+| `sessionId` | Claude Code `session_id`. The card's primary key. |
+| `transcriptPath` | Claude Code `transcript_path`. Used for Stop-time body extraction. |
+| `state` | The `PetState` first computed by the hook script. The server may re-validate Stop edge cases. |
+| `title` | In the order `session_title` -> transcript title -> first line of the prompt. Secret redaction is mandatory. |
+| `body` | Populated only at Stop. Left empty while in progress. |
+| `terminal` | An identifier used solely to focus the terminal on free-form input while idle. Not used for key injection. |
 
 ### 3.3 Transcript tail
 
-Stop 시점에만 transcript JSONL 끝부분을 읽어 마지막 assistant text를 card body로 채운다. v1 기본 상한은 **tail 256KB · 본문 2200자 clamp**(조정 가능)로 시작한다.
+Only at the Stop moment, the end of the transcript JSONL is read to populate the card body with the last assistant text. The v1 defaults start with a cap of **256KB tail · body clamped to 2200 characters** (adjustable).
 
-필터 규칙:
+Filter rules:
 
-| 항목 | 처리 |
+| Item | Handling |
 |---|---|
-| assistant text | 마지막 유효 텍스트를 body로 사용 |
-| tool_use | body 후보에서 제외 |
-| subagent/system-only message | body 후보에서 제외 |
-| API error marker | `Stop -> error` 승격 근거 |
-| secrets/path tokens | title/body 표시 전 redaction |
+| assistant text | Use the last valid text as the body |
+| tool_use | Excluded from body candidates |
+| subagent/system-only message | Excluded from body candidates |
+| API error marker | Basis for the `Stop -> error` promotion |
+| secrets/path tokens | Redacted before displaying title/body |
 
-## 4. 답장 경로: HTTP `PermissionRequest` -> `/permission`
+## 4. Reply path: HTTP `PermissionRequest` -> `/permission`
 
-Claude Code가 권한 결정을 요청할 때 HTTP hook 요청이 열린다. Claude-Pet 서버는 이 HTTP 요청을 **hold**하고, UI에서 사용자가 선택하면 그 응답 body로 Claude Code에 결정을 돌려준다.
+When Claude Code requests a permission decision, an HTTP hook request opens. The Claude-Pet server **holds** this HTTP request, and when the user makes a choice in the UI, it returns the decision to Claude Code via that response body.
 
 ```mermaid
 sequenceDiagram
@@ -145,7 +145,7 @@ sequenceDiagram
 
     CC->>Hook: PermissionRequest payload
     Hook->>Srv: POST /permission (open request)
-    Srv->>UI: pendingPermission 표시
+    Srv->>UI: show pendingPermission
     User->>UI: allow / deny + optional message
     UI->>Srv: resolve permission
     Srv-->>Hook: 200 JSON hookSpecificOutput
@@ -154,7 +154,7 @@ sequenceDiagram
 
 ### 4.1 `/permission` response body
 
-Claude Code용 응답은 event-specific output envelope를 쓴다.
+The response for Claude Code uses the event-specific output envelope.
 
 ```json
 {
@@ -162,70 +162,70 @@ Claude Code용 응답은 event-specific output envelope를 쓴다.
     "hookEventName": "PermissionRequest",
     "decision": {
       "behavior": "allow",
-      "message": "이 파일만 허용"
+      "message": "allow this file only"
     }
   }
 }
 ```
 
-| 값 | 의미 | 신뢰도 |
+| Value | Meaning | Credibility |
 |---|---|---|
-| `behavior: "allow"` | 요청된 도구/동작을 허용한다. | `확인` |
-| `behavior: "deny"` | 거절한다. | `확인` |
-| `updatedInput` | 도구 입력을 치환(방향 수정). | `확인` |
-| `updatedPermissions`(`setMode`) | 모드 변경. **`acceptEdits`만** 사용(`bypassPermissions`는 2.1.110+ 드롭). | `확인` |
-| `message` | 사유/방향 수정 문자열. **decision 내 message 필드는 출처로 미검증** → 빌드 시 실제 응답으로 확인. | `추정` |
+| `behavior: "allow"` | Allows the requested tool/action. | `Verified` |
+| `behavior: "deny"` | Denies it. | `Verified` |
+| `updatedInput` | Substitutes the tool input (course correction). | `Verified` |
+| `updatedPermissions` (`setMode`) | Changes the mode. Use **`acceptEdits` only** (`bypassPermissions` was dropped in 2.1.110+). | `Verified` |
+| `message` | A reason/course-correction string. **The message field within decision is unverified by source** → confirm with an actual response at build time. | `Inferred` |
 
-`hookSpecificOutput.hookEventName="PermissionRequest"` + 중첩 `decision.behavior(allow|deny)` 응답 패턴 `확인`. **차단은 2xx + JSON 본문으로만 성립**(상태코드만으론 불가); non-2xx/timeout/연결실패는 non-blocking 에러로 처리되어 실행이 진행된다 `확인` → §4.2 fallback이 자동 허용 사고를 막는지 반드시 smoke test.
+The response pattern of `hookSpecificOutput.hookEventName="PermissionRequest"` plus a nested `decision.behavior(allow|deny)` is `Verified`. **Blocking holds only with a 2xx + JSON body** (a status code alone is insufficient); a non-2xx/timeout/connection failure is treated as a non-blocking error and execution proceeds, `Verified` → smoke test without fail whether the §4.2 fallback prevents accidental auto-approval.
 
 ### 4.2 No-decision fallback
 
-Claude-Pet은 사용자가 답하지 않았는데 allow/deny를 합성하면 안 된다. 폴백은 **no-decision**이어야 한다.
+Claude-Pet must not synthesize an allow/deny when the user has not answered. The fallback must be **no-decision**.
 
-| 상황 | 동작 |
+| Situation | Behavior |
 |---|---|
-| 앱 미실행 | hook HTTP 연결 실패 또는 timeout. Claude Code 기본 경로로 돌아가야 한다. |
-| DND/disabled | 연결을 hold하지 않고 no-decision 처리한다. |
-| 사용자 timeout | no-decision 처리 후 card `pendingPermission`을 지운다. |
-| 서버 오류 | 5xx 또는 연결 종료. allow/deny를 만들지 않는다. |
+| App not running | The hook's HTTP connection fails or times out. Must fall back to Claude Code's default path. |
+| DND/disabled | Does not hold the connection; handles it as no-decision. |
+| User timeout | Handles it as no-decision and then clears the card's `pendingPermission`. |
+| Server error | 5xx or connection close. Does not manufacture an allow/deny. |
 
-주의: DND/disabled/failure 시 서버가 연결을 닫거나 204 no-decision을 반환하면 Claude Code `PermissionRequest`가 native prompt fallback으로 돌아가는 것으로 본다 `추정`(버전별 동작 미확정). 따라서 Claude-Pet의 v1 구현은 **204가 Claude Code에서 기대한 fallback을 만드는지 별도 smoke test로 확인**하기 전까지, ADR-0004의 fallback 테스트를 release gate로 둔다.
+Caution: when the server closes the connection or returns a 204 no-decision on DND/disabled/failure, Claude Code's `PermissionRequest` is assumed to fall back to the native prompt, `Inferred` (per-version behavior undetermined). Therefore, until Claude-Pet's v1 implementation **confirms via a separate smoke test whether a 204 produces the fallback expected by Claude Code**, ADR-0004's fallback test is kept as a release gate.
 
-## 5. 로컬 서버 endpoint
+## 5. Local server endpoints
 
-| Endpoint | Method | 목적 | 응답 |
+| Endpoint | Method | Purpose | Response |
 |---|---|---|---|
-| `/healthz` | GET | hook installer와 smoke test | `200 {"ok":true,"protocol":"claude-pet.v1"}` |
-| `/state` | POST | command hook 상태 수신 | 항상 빠르게 `204` |
-| `/permission` | POST | HTTP hook hold/resolve | 결정 시 `200 JSON`, no-decision 시 fallback |
-| `/permission/:id/resolve` | POST | UI -> 서버 내부 resolve | `204` |
+| `/healthz` | GET | Hook installer and smoke test | `200 {"ok":true,"protocol":"claude-pet.v1"}` |
+| `/state` | POST | Receive command hook state | Always responds fast with `204` |
+| `/permission` | POST | HTTP hook hold/resolve | `200 JSON` on decision, fallback on no-decision |
+| `/permission/:id/resolve` | POST | UI -> server internal resolve | `204` |
 
-외부 인터페이스는 loopback만 바인딩한다. 기본은 `127.0.0.1`, 포트는 충돌 시 탐색하되 settings와 health check가 같은 값을 공유한다.
+The external interface binds to loopback only. The default is `127.0.0.1`; the port is probed on conflict, but settings and the health check share the same value.
 
-## 6. 보안·무해성
+## 6. Security and harmlessness
 
-| 리스크 | 정책 |
+| Risk | Policy |
 |---|---|
-| 외부 웹에서 permission resolve 호출 | loopback bind, random request id, same-process UI channel 우선 |
-| hook payload에 민감 정보 포함 | title/body redaction, 로그 상한, debug log opt-in |
-| Claude Code 지연 | `/state` 100ms timeout + `exit 0`; `/permission`만 blocking |
-| 잘못된 자동 승인 | timeout/DND/error는 no-decision. allow default 금지 |
-| 키 주입 위험 | 답장은 hook 응답만. idle 자유 입력은 터미널 focus까지만 |
+| Permission resolve called from the external web | Loopback bind, random request id, same-process UI channel preferred |
+| Sensitive info in the hook payload | Title/body redaction, log caps, debug log opt-in |
+| Claude Code latency | `/state` 100ms timeout + `exit 0`; only `/permission` blocks |
+| Incorrect auto-approval | Timeout/DND/error are no-decision. No allow default. |
+| Key injection risk | Replies go through the hook response only. Free-form input while idle goes only as far as terminal focus. |
 
-## 7. 구현 전 smoke tests
+## 7. Pre-implementation smoke tests
 
-1. `settings.json`에 command hook을 설치하고 `UserPromptSubmit -> /state`가 들어오는지 확인한다.
-2. 앱을 끈 상태에서 command hook이 100ms 안에 `exit 0`인지 확인한다.
-3. `PermissionRequest`에서 `allow` 응답 body가 Claude Code에 실제로 반영되는지 확인한다.
-4. `deny + message`가 터미널에 올바르게 전달되는지 확인한다.
-5. DND/앱 부재/no-decision에서 Claude Code native prompt fallback이 살아있는지 확인한다.
-6. Stop API-error transcript를 넣었을 때 `attention`이 아니라 `error`가 되는지 확인한다.
+1. Install a command hook in `settings.json` and confirm that `UserPromptSubmit -> /state` arrives.
+2. With the app off, confirm that the command hook returns `exit 0` within 100ms.
+3. Confirm that on `PermissionRequest`, an `allow` response body is actually reflected in Claude Code.
+4. Confirm that `deny + message` is delivered correctly to the terminal.
+5. Confirm that the Claude Code native prompt fallback is alive under DND / app absence / no-decision.
+6. Confirm that with a Stop API-error transcript, the result is `error` rather than `attention`.
 
-## 8. 남은 불확실성
+## 8. Remaining uncertainties
 
-| 항목 | 현재 상태 | 해소 방법 |
+| Item | Current status | Resolution |
 |---|---|---|
-| Claude Code no-decision의 최적 HTTP 표현 | 공식 문서는 HTTP hook 동작을 설명하지만 native prompt fallback UX는 smoke test 필요 | 실제 Claude Code 버전별 테스트 |
-| idle 상태 자유 입력 | 공식 열린 hook이 없으므로 에이전트에 텍스트를 밀어 넣을 수 없음 | 터미널 focus로 제한 |
-| OpenAI Codex pet 내부 protocol | 공개 schema 없음 | 관찰 기반 재구현 유지 |
-| error/clock card icon | 현재 제공 영상에서 미관찰 | 에러 1회, 권한 대기/clock 캡처 추가 |
+| The optimal HTTP representation of Claude Code no-decision | The official docs describe HTTP hook behavior, but the native prompt fallback UX needs a smoke test | Test against each actual Claude Code version |
+| Free-form input in the idle state | There is no official open hook, so text cannot be pushed into the agent | Limited to terminal focus |
+| OpenAI Codex pet internal protocol | No public schema | Continue observation-based reimplementation |
+| error/clock card icon | Not observed in the currently available footage | Add captures for one error case and for permission-waiting/clock |

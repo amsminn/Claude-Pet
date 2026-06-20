@@ -1,4 +1,3 @@
-"use strict";
 /**
  * Phase 0 mock scenarios — replayed by main so the renderer shows cards + pet
  * animation WITHOUT Claude Code wired up. Each event mirrors a Claude Code hook
@@ -8,8 +7,9 @@
  * `kind` maps 1:1 to EVENT_TO_STATE (src/shared/constants.js). This is a dev
  * harness only — removed once real hooks drive /state in Phase 1.
  */
+import type { WirePayload } from "../shared/types";
 
-const SCENARIOS = {
+const SCENARIOS: Record<string, WirePayload[]> = {
   // ① single task full cycle: thinking -> working(spinner) -> done(green-check)
   single: [
     { t: 0, kind: "SessionStart", sessionId: "A" },
@@ -75,4 +75,4 @@ const SCENARIOS = {
   ],
 };
 
-module.exports = { SCENARIOS };
+export { SCENARIOS };

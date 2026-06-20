@@ -1,48 +1,40 @@
-# 0002. 백엔드는 공식 1차 문서 기준 clean-room으로 구현한다
+# 0002. Implement the Backend Clean-Room from Official Primary Documentation
 
-- 상태: 채택됨
-- 날짜: 2026-06-14
-- 관련: [01-architecture/overview.md](../01-architecture/overview.md), [05-claude-integration](../05-claude-integration/claude-code-hooks.md), [ADR-0004](0004-reply-via-blocking-hook.md)
+- Status: Accepted
+- Date: 2026-06-14
+- Related: [01-architecture/overview.md](../01-architecture/overview.md), [05-claude-integration](../05-claude-integration/claude-code-hooks.md), [ADR-0004](0004-reply-via-blocking-hook.md)
 
 ## Context
 
-Claude-Pet의 백엔드는 네 조각이다 — (1) `settings.json` 훅 인스톨러, (2) 상태 이벤트를 받는 로컬
-서버, (3) 권한/답장을 처리하는 blocking HTTP 훅 브릿지, (4) 트랜스크립트 JSONL tail로 카드 본문을
-채우는 리더.
+The Claude-Pet backend is four pieces — (1) a `settings.json` hook installer, (2) a local server that receives state events, (3) a blocking HTTP hook bridge that handles permissions and replies, and (4) a reader that fills card bodies by tailing the transcript JSONL.
 
-이 네 조각은 **공식 1차 문서만으로 완결적으로 도출된다.** Anthropic Claude Code
-[hooks](https://docs.anthropic.com/en/docs/claude-code/hooks)·[settings](https://docs.anthropic.com/en/docs/claude-code/settings)
-문서가 훅 이벤트·페이로드·HTTP 훅·권한 `decision` 응답 형태를 모두 정의하고, 세션 트랜스크립트
-경로(`~/.claude/projects/<proj>/<session>.jsonl`)와 스키마도 공개돼 있다. 따라서 1차 문서만으로
-백엔드를 완결적으로 구현할 수 있다.
+These four pieces **can be derived completely from official primary documentation alone.** The Anthropic Claude Code [hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) and [settings](https://docs.anthropic.com/en/docs/claude-code/settings) docs define hook events, payloads, HTTP hooks, and the permission `decision` response shape; the session transcript path (`~/.claude/projects/<proj>/<session>.jsonl`) and its schema are public as well. Therefore the backend can be implemented completely from primary documentation alone.
 
 ## Decision
 
-백엔드를 **공식 Claude Code/OpenAI 문서와 자체 관찰만을 근거로 직접(clean-room) 구현**한다.
+We implement the backend **directly (clean-room), based only on official Claude Code/OpenAI documentation and our own observations.**
 
-- 훅 이벤트 → 상태 매핑, 권한 응답 형태, 트랜스크립트 추출 규칙은 모두 1차 문서에서 인용·도출한다
-  ([05-claude-integration](../05-claude-integration/claude-code-hooks.md), [03-state-engine](../03-state-engine/state-machine.md)).
-- 어떤 서드파티 구현 코드도 복사·fork하지 않고 **처음부터 직접 구현**한다. 독창성과 설계 자유도를 위해서다.
-- protocol·UI 경계(컴포넌트 ①~⑥, [overview](../01-architecture/overview.md))는 우리 요구에 맞춰 새로 설계한다.
+- The hook-event → state mapping, the permission response shape, and the transcript extraction rules are all cited and derived from primary documentation ([05-claude-integration](../05-claude-integration/claude-code-hooks.md), [03-state-engine](../03-state-engine/state-machine.md)).
+- We do not copy or fork any third-party implementation code; everything is **implemented from scratch**. This is for originality and design freedom.
+- The protocol and UI boundaries (components ①–⑥, [overview](../01-architecture/overview.md)) are designed fresh to fit our requirements.
 
 ## Consequences
 
-**좋은 점**
-- protocol·UI 경계를 자유롭게 설계한다.
-- 공식 hook schema 변경에 adapter test로 독립 대응한다.
-- 코드 출처가 명확해 라이선스·독창성 리스크가 없다.
+**Upsides**
+- We design the protocol and UI boundaries freely.
+- We respond independently to changes in the official hook schema via adapter tests.
+- Code provenance is clear, so there is no licensing or originality risk.
 
-**나쁜 점·트레이드오프 (정직하게)**
-- hook installer·local server·permission bridge를 직접 구현해야 해 초기 속도가 느리다.
-- OS/터미널 edge case(투명·always-on-top·권한 fallback 등)를 직접 검증해야 한다.
-- behavior parity를 놓치지 않도록 smoke test를 엄격히 유지한다([roadmap](../roadmap.md)).
+**Downsides and tradeoffs (stated honestly)**
+- We have to implement the hook installer, local server, and permission bridge ourselves, so the initial pace is slow.
+- We have to validate OS/terminal edge cases (transparency, always-on-top, permission fallback, etc.) ourselves.
+- We keep smoke tests strict so we do not lose behavior parity ([roadmap](../roadmap.md)).
 
 ## Alternatives considered
 
-- **서드파티 구현을 fork/복사**: 가장 빠를 수 있으나 코드 출처·독창성이 흐려진다. 공식 문서만으로
-  충분히 도출되므로 불필요하다.
-- **별도 라이선스 협의**: 일정상 blocking dependency가 된다. 후속 단계에서나 재검토.
+- **Fork/copy a third-party implementation**: Might be the fastest, but it muddies code provenance and originality. Since the official docs are sufficient to derive everything, it is unnecessary.
+- **Negotiate a separate license**: Becomes a blocking dependency on the schedule. To be revisited only in a later phase.
 
 ## Validation
 
-- 구현 PR에서 서드파티 소스 파일 단위 copy가 없는지 확인한다.
+- In the implementation PR, confirm there is no file-level copy of third-party source.

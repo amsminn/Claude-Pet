@@ -1,7 +1,6 @@
-"use strict";
-const { test } = require("node:test");
-const assert = require("node:assert/strict");
-const permission = require("../src/main/permission");
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import * as permission from "../src/main/permission";
 
 // ── buildPermissionResponse: NESTED decision (interactive PermissionRequest) ──
 
@@ -18,7 +17,7 @@ test("buildPermissionResponse: nested decision envelope (PermissionRequest)", ()
 test("buildPermissionResponse drops the unverified decision.message by default", () => {
   // docs/05 §4.1 + ADR-0004: decision.message is `추정` (unverified) -> never
   // emitted. A reason rides PreToolUse.permissionDecisionReason instead.
-  const out = permission.buildPermissionResponse({ behavior: "deny", message: "no" });
+  const out = permission.buildPermissionResponse({ behavior: "deny", message: "no" } as any);
   assert.deepEqual(out.hookSpecificOutput.decision, { behavior: "deny" });
   assert.ok(!("message" in out.hookSpecificOutput.decision));
 });
@@ -35,14 +34,14 @@ test("buildPermissionResponse keeps the verified updatedInput field", () => {
 });
 
 test("buildPermissionResponse rejects invalid behavior", () => {
-  assert.throws(() => permission.buildPermissionResponse({ behavior: "maybe" }));
+  assert.throws(() => permission.buildPermissionResponse({ behavior: "maybe" } as any));
   assert.throws(() => permission.buildPermissionResponse({}));
 });
 
 test("buildPermissionResponse setMode only allows acceptEdits", () => {
   const out = permission.buildPermissionResponse({ behavior: "allow", setMode: "acceptEdits" });
   assert.deepEqual(out.hookSpecificOutput.decision.updatedPermissions, { setMode: "acceptEdits" });
-  assert.throws(() => permission.buildPermissionResponse({ behavior: "allow", setMode: "bypassPermissions" }));
+  assert.throws(() => permission.buildPermissionResponse({ behavior: "allow", setMode: "bypassPermissions" } as any));
 });
 
 // ── buildPreToolUseResponse: FLAT permissionDecision (headless PreToolUse) ────
@@ -68,13 +67,13 @@ test("buildPreToolUseResponse is flat: no nested decision object", () => {
 });
 
 test("buildPreToolUseResponse accepts allow|deny|ask|defer", () => {
-  for (const d of ["allow", "deny", "ask", "defer"]) {
+  for (const d of ["allow", "deny", "ask", "defer"] as const) {
     assert.equal(
       permission.buildPreToolUseResponse({ permissionDecision: d }).hookSpecificOutput.permissionDecision,
       d
     );
   }
-  assert.throws(() => permission.buildPreToolUseResponse({ permissionDecision: "yes" }));
+  assert.throws(() => permission.buildPreToolUseResponse({ permissionDecision: "yes" } as any));
 });
 
 // ── bridge: hold / resolve ───────────────────────────────────────────────────
@@ -100,9 +99,9 @@ test("bridge.hold honors a caller-supplied id", () => {
 
 test("bridge.hold/resolve settles a PermissionRequest with the nested envelope", () => {
   const bridge = permission.createBridge();
-  let settled = "unset";
+  let settled: any = "unset";
   const id = bridge.hold({ sessionId: "A", form: "PermissionRequest", settle: (e) => (settled = e) });
-  const env = bridge.resolve(id, { decision: "allow", message: "go" });
+  const env: any = bridge.resolve(id, { decision: "allow", message: "go" });
   assert.equal(env.hookSpecificOutput.hookEventName, "PermissionRequest");
   assert.equal(env.hookSpecificOutput.decision.behavior, "allow");
   // message is NOT forwarded onto the nested decision (unverified field).
@@ -114,7 +113,7 @@ test("bridge.hold/resolve settles a PermissionRequest with the nested envelope",
 test("bridge.resolve picks the PreToolUse flat form and routes message -> reason", () => {
   const bridge = permission.createBridge();
   const id = bridge.hold({ sessionId: "A", form: "PreToolUse", settle: () => {} });
-  const env = bridge.resolve(id, { decision: "allow", message: "scoped allow" });
+  const env: any = bridge.resolve(id, { decision: "allow", message: "scoped allow" });
   assert.equal(env.hookSpecificOutput.hookEventName, "PreToolUse");
   assert.equal(env.hookSpecificOutput.permissionDecision, "allow");
   assert.equal(env.hookSpecificOutput.permissionDecisionReason, "scoped allow");
@@ -129,7 +128,7 @@ test("bridge.resolve returns null for an unknown id (never synthesizes)", () => 
 
 test("bridge.cancel is no-decision (settles null, never synthesizes allow/deny)", () => {
   const bridge = permission.createBridge();
-  let settled = "unset";
+  let settled: any = "unset";
   const id = bridge.hold({ sessionId: "A", form: "PermissionRequest", settle: (e) => (settled = e) });
   assert.equal(bridge.cancel(id), true);
   assert.equal(settled, null);
@@ -139,7 +138,7 @@ test("bridge.cancel is no-decision (settles null, never synthesizes allow/deny)"
 
 test("bridge timeout auto-settles as no-decision (null)", async () => {
   const bridge = permission.createBridge();
-  let settled = "unset";
+  let settled: any = "unset";
   bridge.hold({
     sessionId: "A",
     form: "PermissionRequest",
@@ -154,7 +153,7 @@ test("bridge timeout auto-settles as no-decision (null)", async () => {
 
 test("bridge.resolve before timeout wins and cancels the pending timer", async () => {
   const bridge = permission.createBridge();
-  let settled = "unset";
+  let settled: any = "unset";
   const id = bridge.hold({
     sessionId: "A",
     form: "PermissionRequest",

@@ -3,20 +3,31 @@
   "version": "0.0.0",
   "private": true,
   "description": "Floating desktop pet that mirrors Claude Code activity as a card stack and lets you reply inline.",
-  "main": "src/main/index.js",
+  "main": "./out/main/index.js",
   "scripts": {
-    "start": "electron .",
-    "test": "node --test \"test/**/*.test.js\""
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "dist": "electron-vite build && electron-builder"
   },
   "devDependencies": {
+    "@types/node": "^26.0.0",
     "electron": "^33.4.11",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vite": "^7.3.5"
   },
   "build": {
     "appId": "dev.claudepet.app",
     "productName": "Claude-Pet",
     "files": [
-      "src/**/*",
+      "out/**/*",
       "package.json"
     ],
     "directories": {

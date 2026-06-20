@@ -1,4 +1,3 @@
-"use strict";
 /**
  * Pure state engine — NO electron, NO DOM. Unit-testable with `node --test`.
  *
@@ -20,11 +19,19 @@
  * session's prior value rather than throwing. See `notes` in the task output for
  * the exact assumed fields.
  */
-const fs = require("node:fs");
-const C = require("../shared/constants");
+import * as fs from "node:fs";
+import * as C from "../shared/constants";
+import type {
+  PetState,
+  PendingPermission,
+  SessionState,
+  StatePayload,
+  Store,
+  WirePayload,
+} from "../shared/types";
 
 const { ROW, EVENT_TO_STATE, WORKING_STATES } = C;
-const WORKING = new Set(WORKING_STATES);
+const WORKING = new Set<PetState>(WORKING_STATES);
 
 // Card-body / title hard limits (docs/03 §0.1, §3.3; docs/05 §3.3).
 const TITLE_MAX = 40; // §0.1: prompt 첫 줄 ≤40자
@@ -32,37 +39,13 @@ const BODY_CLAMP_DEFAULT = 2200; // §3.3: 본문 2200자 clamp
 const TAIL_BYTES_DEFAULT = 256 * 1024; // §3.3: tail 256KB
 
 /**
- * @typedef {Object} SessionState
- * @property {string} sessionId   map key / card id (§0.1)
- * @property {string} state       normalized PetState (§1.1)
- * @property {string} title       card title (UserPromptSubmit/Stop)
- * @property {string} body        card body (Stop: last assistant text)
- * @property {?{tool:string,cmd:string,id?:string}} pendingPermission
- * @property {number} createdAt   monotonic seq of first event
- * @property {number} updatedAt   monotonic seq of latest event
- * @property {number} completedAt monotonic seq when last entered `attention`
- */
-
-/**
- * @typedef {Object} Store
- * @property {Map<string, SessionState>} sessions
- * @property {number} seq   monotonic counter (ordering, NOT wall-clock)
- */
-
-/**
  * Create an empty session store.
- * @returns {Store}
  */
-function createStore() {
+function createStore(): Store {
   return { sessions: new Map(), seq: 0 };
 }
 
-/**
- * @param {string} id
- * @param {number} seq
- * @returns {SessionState}
- */
-function makeSession(id, seq) {
+function makeSession(id: string, seq: number): SessionState {
   return {
     sessionId: id,
     state: "idle",
@@ -79,12 +62,12 @@ function makeSession(id, seq) {
 // Each accepts a payload and returns the first non-empty alias, else undefined.
 
 /** sessionId | s | session_id | sessionID */
-function pickSessionId(p) {
+function pickSessionId(p: WirePayload): string | undefined {
   return firstStr(p && (p.sessionId ?? p.s ?? p.session_id ?? p.sessionID));
 }
 
 /** event | kind | hook_event_name | hookEventName | eventName */
-function pickEvent(p) {
+function pickEvent(p: WirePayload): string | undefined {
   return firstStr(
     p &&
       (p.event ??
@@ -96,7 +79,7 @@ function pickEvent(p) {
 }
 
 /** title | session_title | sessionTitle | customTitle | agentName */
-function pickTitle(p) {
+function pickTitle(p: WirePayload): string | undefined {
   return firstStr(
     p &&
       (p.title ??
@@ -110,17 +93,17 @@ function pickTitle(p) {
 }
 
 /** body | summary | text */
-function pickBody(p) {
+function pickBody(p: WirePayload): string | undefined {
   return firstStr(p && (p.body ?? p.summary ?? p.text));
 }
 
 /** transcriptPath | transcript_path | transcript */
-function pickTranscriptPath(p) {
+function pickTranscriptPath(p: WirePayload): string | undefined {
   return firstStr(p && (p.transcriptPath ?? p.transcript_path ?? p.transcript));
 }
 
 /** Normalize a permission descriptor from several plausible shapes. */
-function pickPerm(p) {
+function pickPerm(p: WirePayload): PendingPermission | null {
   if (!p) return null;
   const raw =
     p.perm ?? p.permission ?? p.pendingPermission ?? p.permissionRequest;
@@ -133,7 +116,7 @@ function pickPerm(p) {
           raw.input ??
           (raw.toolInput && (raw.toolInput.command ?? raw.toolInput.cmd))
       ) || "…";
-    const out = { tool, cmd };
+    const out: PendingPermission = { tool, cmd };
     const id = firstStr(raw.id ?? raw.requestId ?? raw.request_id);
     if (id) out.id = id;
     return out;
@@ -144,7 +127,7 @@ function pickPerm(p) {
 }
 
 /** Return a trimmed string for any non-empty string-ish value, else undefined. */
-function firstStr(v) {
+function firstStr(v: unknown): string | undefined {
   if (typeof v === "string") {
     const t = v.trim();
     return t.length ? t : undefined;
@@ -161,12 +144,9 @@ function firstStr(v) {
  * Accepts both our /state envelope and raw-ish hook payloads. Recognized keys
  * (any alias): sessionId, event/kind, title, body, perm, state, transcriptPath,
  * plus an explicit error marker (isApiErrorMessage / error / apiError).
- *
- * @param {Object} payload
- * @returns {SessionState}
  */
-function applyEvent(store, payload) {
-  const p = payload && typeof payload === "object" ? payload : {};
+function applyEvent(store: Store, payload: WirePayload): SessionState {
+  const p: WirePayload = payload && typeof payload === "object" ? payload : {};
   const id = pickSessionId(p) || "unknown";
 
   let s = store.sessions.get(id);
@@ -200,7 +180,7 @@ function applyEvent(store, payload) {
       next = errored ? "error" : next || "attention";
     }
 
-    if (next) s.state = next;
+    if (next) s.state = next as PetState;
 
     // entering attention records the completion seq (stack promotion key, §4).
     // Guard on the transition: a repeat/late Stop on an already-attention card
@@ -226,7 +206,7 @@ function applyEvent(store, payload) {
 }
 
 /** True when the payload carries any API-error / Stop-failure marker. */
-function isErrorFlagged(p) {
+function isErrorFlagged(p: WirePayload): boolean {
   return Boolean(
     p.isApiErrorMessage ??
       p.is_api_error_message ??
@@ -240,12 +220,12 @@ function isErrorFlagged(p) {
  * Resolve a pending permission on a session (UI decided allow/deny). Clears
  * pendingPermission and advances the session (§5: allow -> working, deny ->
  * attention). Returns null when there is nothing pending (idempotent).
- * @param {Store} store
- * @param {string} sessionId
- * @param {"allow"|"deny"} decision
- * @returns {?SessionState}
  */
-function resolvePermission(store, sessionId, decision) {
+function resolvePermission(
+  store: Store,
+  sessionId: string,
+  decision: "allow" | "deny"
+): SessionState | null {
   const s = store.sessions.get(sessionId);
   if (!s || !s.pendingPermission) return null;
   s.pendingPermission = null;
@@ -264,10 +244,9 @@ function resolvePermission(store, sessionId, decision) {
  * Pure function of a session list. Priority:
  *   permission/notification (waving) > error (failed) > any working (running)
  *   > all-attention (review) > idle.
- * @param {SessionState[]} list
- * @returns {number} atlas row index
+ * @returns atlas row index
  */
-function petRow(list) {
+function petRow(list: SessionState[]): number {
   const sessions = Array.isArray(list) ? list : [];
   if (sessions.some((s) => s && (s.pendingPermission || s.state === "notification")))
     return ROW.waving;
@@ -284,10 +263,8 @@ function petRow(list) {
  * Ordered visible card list: chat-like creation order (oldest top -> newest
  * bottom). A session that has gone to sleep with nothing to show (no body) is
  * dropped (docs/04 §4). Pending-permission sessions are always kept.
- * @param {Store} store
- * @returns {SessionState[]}
  */
-function orderedCards(store) {
+function orderedCards(store: Store): SessionState[] {
   return [...store.sessions.values()]
     .filter((s) => s.state !== "sleeping" || s.body || s.pendingPermission)
     .sort((a, b) => a.createdAt - b.createdAt);
@@ -297,10 +274,8 @@ function orderedCards(store) {
  * Build the serializable snapshot pushed to the renderer over IPC.STATE
  * (without petAsset — the glue attaches that). petRow is computed over ALL
  * sessions (including hidden sleeping ones) so the pet still reflects activity.
- * @param {Store} store
- * @returns {{protocol:string, petRow:number, cards:SessionState[]}}
  */
-function snapshot(store) {
+function snapshot(store: Store): StatePayload {
   const all = [...store.sessions.values()];
   return {
     protocol: C.STATE_PROTOCOL,
@@ -315,13 +290,15 @@ function snapshot(store) {
  * returns "" on any failure. tool_use / subagent / api-error entries are
  * skipped; the result is redacted then clamped.
  *
- * @param {string} transcriptPath  absolute path to <session>.jsonl
- * @param {Object} [opts]
- * @param {number} [opts.tailBytes=262144]  read window from EOF (256KB)
- * @param {number} [opts.clamp=2200]        max chars of returned body
- * @returns {string} last assistant text, or "" if none / unreadable
+ * @param transcriptPath  absolute path to <session>.jsonl
+ * @param opts.tailBytes  read window from EOF (256KB)
+ * @param opts.clamp      max chars of returned body
+ * @returns last assistant text, or "" if none / unreadable
  */
-function extractCardBody(transcriptPath, opts = {}) {
+function extractCardBody(
+  transcriptPath: string,
+  opts: { tailBytes?: number; clamp?: number } = {}
+): string {
   const tailBytes = positiveInt(opts.tailBytes, TAIL_BYTES_DEFAULT);
   const clamp = positiveInt(opts.clamp, BODY_CLAMP_DEFAULT);
   const rows = readTailRows(transcriptPath, tailBytes);
@@ -340,13 +317,13 @@ function extractCardBody(transcriptPath, opts = {}) {
  * Read the tail window of a JSONL file and parse each complete line. Drops the
  * first line of the window (likely a partial record cut by the byte offset).
  * Returns parsed objects, or null on any I/O failure (never throws).
- * @param {string} transcriptPath
- * @param {number} tailBytes
- * @returns {?Object[]}
  */
-function readTailRows(transcriptPath, tailBytes) {
+function readTailRows(
+  transcriptPath: string,
+  tailBytes: number
+): WirePayload[] | null {
   if (typeof transcriptPath !== "string" || !transcriptPath) return null;
-  let fd;
+  let fd: number | undefined;
   try {
     const stat = fs.statSync(transcriptPath);
     if (!stat.isFile() || stat.size === 0) return [];
@@ -360,7 +337,7 @@ function readTailRows(transcriptPath, tailBytes) {
     // We do NOT blindly drop it — that loses a whole valid record when the cut
     // lands on a line boundary (common for small/single-message transcripts).
     // The per-line JSON.parse below skips a genuine partial line naturally.
-    const rows = [];
+    const rows: WirePayload[] = [];
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
@@ -388,10 +365,8 @@ function readTailRows(transcriptPath, tailBytes) {
  * Scan a transcript tail for an API-error assistant entry, used to promote
  * Stop -> error (§2.1). Returns false on any failure or missing path so a normal
  * Stop stays `attention` (never falsely escalates).
- * @param {?string} transcriptPath
- * @returns {boolean}
  */
-function transcriptHasApiError(transcriptPath) {
+function transcriptHasApiError(transcriptPath: string | undefined): boolean {
   if (!transcriptPath) return false;
   const rows = readTailRows(transcriptPath, TAIL_BYTES_DEFAULT);
   if (!rows) return false;
@@ -407,10 +382,8 @@ function transcriptHasApiError(transcriptPath) {
  * not an eligible assistant text message. Defensive: the real schema is
  * spike-verified in Phase 1 (§3.3) — this handles the common shapes. Filters:
  * non-assistant roles, api-error markers, tool_use blocks, subagent/system rows.
- * @param {Object} row
- * @returns {string}
  */
-function pickAssistantText(row) {
+function pickAssistantText(row: WirePayload): string {
   if (!row || typeof row !== "object") return "";
   // subagent / system-only sidecar rows are excluded (§3.3).
   if (row.isSidechain || row.subtype === "subagent") return "";
@@ -446,7 +419,7 @@ function pickAssistantText(row) {
 // ── title / secret hygiene (§0.1, §3.3: secret redaction required) ───────────
 
 /** Collapse to the first line, redact secrets, truncate to TITLE_MAX chars. */
-function redactTitle(raw) {
+function redactTitle(raw: string): string {
   const firstLine = String(raw).split(/\r?\n/, 1)[0];
   const cleaned = redactSecrets(firstLine).trim();
   if (cleaned.length <= TITLE_MAX) return cleaned;
@@ -457,10 +430,8 @@ function redactTitle(raw) {
  * Best-effort secret / token redaction for display strings (§3.3). Conservative
  * — only masks high-signal patterns so normal prose is untouched. Not a security
  * control; defense-in-depth before showing hook text in a card.
- * @param {string} raw
- * @returns {string}
  */
-function redactSecrets(raw) {
+function redactSecrets(raw: string): string {
   if (typeof raw !== "string" || !raw) return "";
   return (
     raw
@@ -480,17 +451,17 @@ function redactSecrets(raw) {
 }
 
 /** Clamp a (single) body string to the default body limit. */
-function clampBody(raw) {
+function clampBody(raw: string): string {
   const s = typeof raw === "string" ? raw : "";
   return s.length > BODY_CLAMP_DEFAULT ? s.slice(0, BODY_CLAMP_DEFAULT) : s;
 }
 
 /** Coerce to a positive integer, else fall back. */
-function positiveInt(v, fallback) {
-  return Number.isInteger(v) && v > 0 ? v : fallback;
+function positiveInt(v: number | undefined, fallback: number): number {
+  return Number.isInteger(v) && (v as number) > 0 ? (v as number) : fallback;
 }
 
-module.exports = {
+export {
   createStore,
   applyEvent,
   resolvePermission,

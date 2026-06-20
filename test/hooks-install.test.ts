@@ -1,19 +1,18 @@
-"use strict";
-const { test } = require("node:test");
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const hooks = require("../src/main/hooks-install");
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as hooks from "../src/main/hooks-install";
 
-function tmpSettings(initial) {
+function tmpSettings(initial?: any) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-pet-hooks-"));
   const p = path.join(dir, "settings.json");
   if (initial !== undefined) fs.writeFileSync(p, JSON.stringify(initial, null, 2));
   return { p, dir, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
 
-function readJson(p) {
+function readJson(p: string): any {
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
 
@@ -49,7 +48,7 @@ test("changing the port re-registers with the new url and reports changed", () =
   const r = hooks.installHooks({ port: 9999, settingsPath: p });
   assert.equal(r.changed, true);
   const s = readJson(p);
-  const ours = s.hooks.PreToolUse.filter((g) => g._owner === "claude-pet");
+  const ours = s.hooks.PreToolUse.filter((g: any) => g._owner === "claude-pet");
   assert.equal(ours.length, 1, "still exactly one of our PreToolUse groups");
   assert.match(ours[0].hooks[0].url, /:9999\/state$/);
   assert.ok(!JSON.stringify(s).includes(":8080/"), "stale port fully removed");
@@ -61,7 +60,7 @@ test("installs a state http hook for every STATE_EVENTS entry with 100ms timeout
   hooks.installHooks({ port: 8080, settingsPath: p });
   const s = readJson(p);
   for (const event of hooks.STATE_EVENTS) {
-    const ours = (s.hooks[event] || []).filter((g) => g._owner === "claude-pet");
+    const ours = (s.hooks[event] || []).filter((g: any) => g._owner === "claude-pet");
     assert.equal(ours.length, 1, `exactly one group for ${event}`);
     const h = ours[0].hooks[0];
     assert.equal(h.type, "http");
@@ -77,7 +76,7 @@ test("installHooks preserves the user's existing foreign hooks", () => {
   });
   hooks.installHooks({ port: 8080, settingsPath: p });
   const after = readJson(p);
-  const foreign = after.hooks.PreToolUse.filter((g) => g._owner !== "claude-pet");
+  const foreign = after.hooks.PreToolUse.filter((g: any) => g._owner !== "claude-pet");
   assert.equal(foreign.length, 1);
   assert.equal(foreign[0].hooks[0].command, "echo hi");
   cleanup();
@@ -104,7 +103,7 @@ test("uninstallHooks removes only our hooks, keeps foreign ones", () => {
   const res = hooks.uninstallHooks({ settingsPath: p });
   assert.equal(res.changed, true);
   const after = readJson(p);
-  const ours = after.hooks.PreToolUse.filter((g) => g._owner === "claude-pet");
+  const ours = after.hooks.PreToolUse.filter((g: any) => g._owner === "claude-pet");
   assert.equal(ours.length, 0);
   assert.equal(after.hooks.PreToolUse.length, 1); // foreign preserved
   assert.equal(after.hooks.PreToolUse[0].hooks[0].command, "echo hi");

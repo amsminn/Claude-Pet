@@ -1,11 +1,15 @@
-"use strict";
-const { test } = require("node:test");
-const assert = require("node:assert/strict");
-const http = require("node:http");
-const net = require("node:net");
-const { startServer } = require("../src/main/server");
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import * as http from "node:http";
+import * as net from "node:net";
+import { startServer } from "../src/main/server";
 
-function request(base, method, path, body) {
+function request(
+  base: string,
+  method: string,
+  path: string,
+  body?: any
+): Promise<{ status: number | undefined; body: string }> {
   return new Promise((resolve, reject) => {
     const data = body === undefined ? null : JSON.stringify(body);
     const req = http.request(
@@ -24,7 +28,12 @@ function request(base, method, path, body) {
 }
 
 // Send a raw (possibly malformed) body without forcing JSON content-type.
-function requestRaw(base, method, path, raw) {
+function requestRaw(
+  base: string,
+  method: string,
+  path: string,
+  raw?: string | null
+): Promise<{ status: number | undefined; body: string }> {
   return new Promise((resolve, reject) => {
     const req = http.request(base + path, { method }, (res) => {
       let buf = "";
@@ -46,7 +55,7 @@ test("/healthz returns ok + protocol", async () => {
 });
 
 test("/state acks 204 and forwards parsed payload to onEvent", async () => {
-  let got = null;
+  let got: any = null;
   const srv = await startServer({ port: 0, onEvent: (p) => (got = p) });
   const res = await request(srv.url, "POST", "/state", { event: "Stop", sessionId: "A" });
   assert.equal(res.status, 204);
@@ -137,8 +146,8 @@ test("malformed /permission body returns 204 without invoking onPermission", asy
 });
 
 test("/permission/:id/resolve settles the held hook request with a decision", async () => {
-  let settleRef = null;
-  let heldId = null;
+  let settleRef: ((env: object | null) => void) | null = null;
+  let heldId: any = null;
   const srv = await startServer({
     port: 0,
     onPermission: (payload, settle) => {
@@ -166,7 +175,7 @@ test("/permission/:id/resolve settles the held hook request with a decision", as
 });
 
 test("/permission/:id/resolve with no body settles the held request as no-decision", async () => {
-  let settleRef = null;
+  let settleRef: ((env: object | null) => void) | null = null;
   const srv = await startServer({
     port: 0,
     onPermission: (_payload, settle) => (settleRef = settle),
@@ -205,8 +214,8 @@ test("binds loopback only", async () => {
 test("a fixed busy port is discovered around the collision", async () => {
   // Occupy a fixed loopback port, then ask the server for the same one.
   const blocker = net.createServer(() => {});
-  const busyPort = await new Promise((resolve) => {
-    blocker.listen(0, "127.0.0.1", () => resolve(blocker.address().port));
+  const busyPort: number = await new Promise((resolve) => {
+    blocker.listen(0, "127.0.0.1", () => resolve((blocker.address() as net.AddressInfo).port));
   });
 
   const srv = await startServer({ port: busyPort, host: "127.0.0.1" });
@@ -222,7 +231,7 @@ test("a fixed busy port is discovered around the collision", async () => {
 });
 
 test("close() drains a still-held permission request as no-decision", async () => {
-  let settleRef = null;
+  let settleRef: ((env: object | null) => void) | null = null;
   const srv = await startServer({
     port: 0,
     onPermission: (_payload, settle) => (settleRef = settle),
@@ -235,7 +244,7 @@ test("close() drains a still-held permission request as no-decision", async () =
   assert.equal(res.status, 204, "drained held request -> no-decision");
 });
 
-function waitFor(pred, timeoutMs = 1000) {
+function waitFor(pred: () => boolean, timeoutMs = 1000): Promise<void> {
   return new Promise((resolve, reject) => {
     const t0 = Date.now();
     const tick = () => {

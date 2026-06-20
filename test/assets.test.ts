@@ -1,12 +1,13 @@
-"use strict";
-const { test } = require("node:test");
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const { fileURLToPath } = require("node:url");
-const assets = require("../src/main/assets");
-const C = require("../src/shared/constants");
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+import * as assets from "../src/main/assets";
+import * as C from "../src/shared/constants";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Synthetic fixture root checked into the repo. Contains FAKE meta + non-art
 // placeholder bytes only — no copyrighted spritesheet is ever copied here.
@@ -16,7 +17,7 @@ const EMPTY_ROOT = path.join(__dirname, "fixtures", "empty-root");
 // Build a throwaway pets root for the dynamic edge cases. Returns the root path
 // and a cleanup fn. Each pet is `{ slug, json (object|string|undefined),
 // sheetRel? }`; when `sheetRel` is given a placeholder file is written there.
-function makeRoot(pets) {
+function makeRoot(pets: any[]) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-pet-assets-"));
   for (const pet of pets) {
     const dir = path.join(root, pet.slug);
@@ -77,7 +78,7 @@ test("discoverPets finds valid fixture pets and returns the contract PetMeta sha
   assert.ok(!byId.has("broken"), "broken json skipped (V1)");
   assert.ok(!byId.has("no-sheet"), "missing spritesheetPath skipped (V2)");
 
-  const mochi = byId.get("mochi");
+  const mochi = byId.get("mochi")!;
   // exactly the contract PetMeta keys — no internal _dir / _spritesheetPath leak
   assert.deepEqual(Object.keys(mochi).sort(), [
     "description",
@@ -93,7 +94,7 @@ test("discoverPets finds valid fixture pets and returns the contract PetMeta sha
 
 test("discoverPets falls back displayName->id and omits kind when absent", () => {
   const pets = assets.discoverPets(FIXTURE_ROOT);
-  const fox = pets.find((p) => p.id === "pixel-fox");
+  const fox = pets.find((p) => p.id === "pixel-fox")!;
   assert.ok(fox);
   assert.equal(fox.displayName, "pixel-fox", "displayName falls back to id");
   assert.equal(fox.description, "", "missing description defaults to empty string");
@@ -127,7 +128,7 @@ test("discoverPets ignores non-directory entries in the root", () => {
 // ── loadPet over the synthetic fixture root ──────────────────────────────────
 
 test("loadPet returns a PetAsset with contract geometry and a file:// url", () => {
-  const asset = assets.loadPet("mochi", FIXTURE_ROOT);
+  const asset = assets.loadPet("mochi", FIXTURE_ROOT)!;
   assert.ok(asset, "asset loaded");
 
   // geometry is the released-app contract from shared constants (8x9, 192x208)
@@ -157,7 +158,7 @@ test("loadPet returns a PetAsset with contract geometry and a file:// url", () =
 
 test("loadPet resolves a spritesheetPath that has a subdirectory component", () => {
   // pixel-fox -> art/sheet.webp (still inside the pet dir)
-  const asset = assets.loadPet("pixel-fox", FIXTURE_ROOT);
+  const asset = assets.loadPet("pixel-fox", FIXTURE_ROOT)!;
   assert.ok(asset);
   assert.equal(
     asset.spritesheetPath,
@@ -166,7 +167,7 @@ test("loadPet resolves a spritesheetPath that has a subdirectory component", () 
 });
 
 test("loadPet ignores the proposed animation block (no decode, no honor)", () => {
-  const asset = assets.loadPet("pixel-fox", FIXTURE_ROOT);
+  const asset = assets.loadPet("pixel-fox", FIXTURE_ROOT)!;
   assert.ok(asset);
   // the descriptor carries paths + geometry only; nothing from `animation`.
   assert.deepEqual(Object.keys(asset).sort(), [
@@ -184,7 +185,7 @@ test("loadPet ignores the proposed animation block (no decode, no honor)", () =>
 test("loadPet does NOT read or decode the spritesheet bytes", () => {
   // The fixture sheet is a tiny placeholder, not a valid WebP. If loadPet tried
   // to decode it the call would fail; instead it just checks readability.
-  const asset = assets.loadPet("mochi", FIXTURE_ROOT);
+  const asset = assets.loadPet("mochi", FIXTURE_ROOT)!;
   assert.ok(asset);
   // geometry came from constants, not from the (non-image) file contents.
   assert.equal(asset.atlas.width, 1536);
@@ -198,7 +199,7 @@ test("loadPet can resolve a pet by id when the slug != folder name", () => {
   try {
     // folder is 'folder-x' but the pet id is 'real-id'
     assert.equal(assets.loadPet("nope", root), null);
-    const asset = assets.loadPet("real-id", root);
+    const asset = assets.loadPet("real-id", root)!;
     assert.ok(asset, "found via id fallback");
     assert.equal(asset.meta.id, "real-id");
     assert.equal(asset.meta.slug, "folder-x");
@@ -298,7 +299,7 @@ test("id falls back to folder name when id is missing", () => {
     const pets = assets.discoverPets(root);
     assert.equal(pets.length, 1);
     assert.equal(pets[0].id, "from-folder", "id falls back to slug");
-    const asset = assets.loadPet("from-folder", root);
+    const asset = assets.loadPet("from-folder", root)!;
     assert.ok(asset);
     assert.equal(asset.meta.id, "from-folder");
   } finally {

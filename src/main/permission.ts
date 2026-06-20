@@ -1,4 +1,3 @@
-"use strict";
 /**
  * Permission bridge + response builders — NO electron. Unit-testable with
  * plain `node --test` (require()-able, no Electron runtime).
@@ -28,17 +27,23 @@
  * Emits only verified `decision` fields — `message` is intentionally dropped
  * (unverified per docs/05 §4.1 + ADR-0004). (docs/05 §4.1)
  *
- * @param {Object} args
- * @param {"allow"|"deny"} args.behavior
- * @param {Object} [args.updatedInput]       replace tool input (verified)
- * @param {"acceptEdits"} [args.setMode]      only acceptEdits is permitted
- * @returns {{ hookSpecificOutput: { hookEventName: "PermissionRequest", decision: Object } }}
+ * @param args.behavior      allow | deny
+ * @param args.updatedInput  replace tool input (verified)
+ * @param args.setMode       only acceptEdits is permitted
  */
-function buildPermissionResponse({ behavior, updatedInput, setMode } = {}) {
+function buildPermissionResponse({
+  behavior,
+  updatedInput,
+  setMode,
+}: {
+  behavior?: "allow" | "deny";
+  updatedInput?: object;
+  setMode?: "acceptEdits";
+} = {}): { hookSpecificOutput: { hookEventName: "PermissionRequest"; decision: any } } {
   if (behavior !== "allow" && behavior !== "deny") {
     throw new Error(`buildPermissionResponse: invalid behavior "${behavior}"`);
   }
-  const decision = { behavior };
+  const decision: any = { behavior };
   if (updatedInput) decision.updatedInput = updatedInput;
   if (setMode !== undefined) {
     if (setMode !== "acceptEdits") {
@@ -59,24 +64,26 @@ function buildPermissionResponse({ behavior, updatedInput, setMode } = {}) {
  * `permissionDecisionReason` is the documented reason channel for this form.
  * (build-plan §0 blocking-reply ①, docs/05 §4)
  *
- * @param {Object} args
- * @param {"allow"|"deny"|"ask"|"defer"} args.permissionDecision
- * @param {string} [args.permissionDecisionReason]
- * @param {Object} [args.updatedInput]
- * @returns {{ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: string } }}
+ * @param args.permissionDecision        allow | deny | ask | defer
+ * @param args.permissionDecisionReason  reason text
+ * @param args.updatedInput              replace tool input
  */
 function buildPreToolUseResponse({
   permissionDecision,
   permissionDecisionReason,
   updatedInput,
-} = {}) {
+}: {
+  permissionDecision?: "allow" | "deny" | "ask" | "defer";
+  permissionDecisionReason?: string;
+  updatedInput?: object;
+} = {}): { hookSpecificOutput: { hookEventName: "PreToolUse"; permissionDecision: string } } {
   const valid = ["allow", "deny", "ask", "defer"];
-  if (!valid.includes(permissionDecision)) {
+  if (!valid.includes(permissionDecision as string)) {
     throw new Error(
       `buildPreToolUseResponse: invalid permissionDecision "${permissionDecision}"`
     );
   }
-  const out = {
+  const out: any = {
     hookEventName: "PreToolUse",
     permissionDecision,
   };
@@ -88,15 +95,20 @@ function buildPreToolUseResponse({
 }
 
 /**
- * @typedef {Object} PendingRequest
- * @property {string} [id]            caller-supplied id; auto-generated if absent
- * @property {string} sessionId
- * @property {"PermissionRequest"|"PreToolUse"} form
- * @property {function(?Object):void} settle  settles the held HTTP response with
- *                                             an envelope, or `null` for no-decision
- * @property {Object} [meta]          {tool, cmd} for the card UI
- * @property {number} [timeoutMs]     auto no-decision after this many ms (optional)
+ * A held permission request awaiting a UI decision.
  */
+interface PendingRequest {
+  /** caller-supplied id; auto-generated if absent */
+  id?: string;
+  sessionId: string;
+  form: "PermissionRequest" | "PreToolUse";
+  /** settles the held HTTP response with an envelope, or `null` for no-decision */
+  settle: (env: object | null) => void;
+  /** {tool, cmd} for the card UI */
+  meta?: object;
+  /** auto no-decision after this many ms (optional) */
+  timeoutMs?: number;
+}
 
 /**
  * Create the permission bridge: holds open blocking HTTP requests until the UI
@@ -104,27 +116,19 @@ function buildPreToolUseResponse({
  * cancel / unknown-id never synthesize a decision — they settle `null`.
  *
  * In-memory map only (no electron); the HTTP wiring lives in server.js.
- *
- * @returns {{
- *   hold: function(PendingRequest): string,
- *   resolve: function(string, {decision:string, message?:string, setMode?:string}): ?Object,
- *   cancel: function(string): boolean,
- *   pending: function(): PendingRequest[]
- * }}
  */
 function createBridge() {
-  /** @type {Map<string, PendingRequest & {timer?: NodeJS.Timeout}>} */
-  const pending = new Map();
+  const pending = new Map<string, PendingRequest & { timer?: NodeJS.Timeout }>();
 
   /** Generate a collision-resistant request id. */
-  function genId() {
+  function genId(): string {
     return `perm_${Date.now().toString(36)}_${Math.random()
       .toString(36)
       .slice(2, 8)}`;
   }
 
   /** Remove an entry and clear its timeout timer (if any). */
-  function take(id) {
+  function take(id: string): (PendingRequest & { timer?: NodeJS.Timeout }) | null {
     const req = pending.get(id);
     if (!req) return null;
     pending.delete(id);
@@ -136,7 +140,7 @@ function createBridge() {
   }
 
   /** Settle a request with no-decision (null). Shared by cancel + timeout. */
-  function noDecision(id) {
+  function noDecision(id: string): boolean {
     const req = take(id);
     if (!req) return false;
     if (typeof req.settle === "function") req.settle(null);
@@ -149,12 +153,11 @@ function createBridge() {
      * with the response envelope (resolve) or `null` (cancel / timeout).
      * If `req.timeoutMs` is a positive number, the request auto-settles as
      * no-decision after that delay.
-     * @param {PendingRequest} req
-     * @returns {string} id
+     * @returns id
      */
-    hold(req) {
+    hold(req: PendingRequest): string {
       const id = req.id || genId();
-      const entry = { ...req, id };
+      const entry: PendingRequest & { timer?: NodeJS.Timeout } = { ...req, id };
       if (typeof req.timeoutMs === "number" && req.timeoutMs > 0) {
         entry.timer = setTimeout(() => noDecision(id), req.timeoutMs);
         // Don't keep the event loop alive solely for a pending permission.
@@ -172,12 +175,11 @@ function createBridge() {
      * Reason routing: a `message` only reaches the wire via the verified
      * PreToolUse `permissionDecisionReason`. For PermissionRequest it is NOT
      * forwarded (the nested `decision.message` field is unverified).
-     *
-     * @param {string} id
-     * @param {{decision:"allow"|"deny", message?:string, setMode?:string}} d
-     * @returns {?Object}
      */
-    resolve(id, d = {}) {
+    resolve(
+      id: string,
+      d: { decision?: "allow" | "deny"; message?: string; setMode?: "acceptEdits" } = {}
+    ): object | null {
       const req = take(id);
       if (!req) return null;
       const envelope =
@@ -197,22 +199,17 @@ function createBridge() {
     /**
      * Cancel a held request as no-decision (timeout / DND / app closing).
      * NEVER synthesizes allow/deny — settles with `null`.
-     * @param {string} id
-     * @returns {boolean} true if a request was cancelled
+     * @returns true if a request was cancelled
      */
-    cancel(id) {
+    cancel(id: string): boolean {
       return noDecision(id);
     },
 
-    /** @returns {PendingRequest[]} a snapshot of currently-held requests */
-    pending() {
+    /** @returns a snapshot of currently-held requests */
+    pending(): PendingRequest[] {
       return [...pending.values()].map(({ timer, ...req }) => req);
     },
   };
 }
 
-module.exports = {
-  createBridge,
-  buildPermissionResponse,
-  buildPreToolUseResponse,
-};
+export { createBridge, buildPermissionResponse, buildPreToolUseResponse };

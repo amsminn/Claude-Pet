@@ -1,4 +1,3 @@
-"use strict";
 /**
  * Loopback HTTP server (component ①) — receives Claude Code hook events and
  * holds blocking permission requests. NO electron (plain node:http), so it can
@@ -15,8 +14,9 @@
  * by Claude Code as a non-blocking error, so the no-decision fallback writes a
  * bare 204 and NEVER synthesizes an allow/deny (docs/05 §4.2).
  */
-const http = require("node:http");
-const C = require("../shared/constants");
+import * as http from "node:http";
+import * as C from "../shared/constants";
+import type { WirePayload } from "../shared/types";
 
 // Body guard: hook payloads are small; reject anything pathological.
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
@@ -27,17 +27,26 @@ const PORT_PROBE_TRIES = 64;
 
 /**
  * Start the local server.
- * @param {Object} opts
- * @param {number} [opts.port=0]   0 = OS-assigned ephemeral port
- * @param {string} [opts.host="127.0.0.1"]
- * @param {function(Object):void} [opts.onEvent]       called with each /state payload
- * @param {function(Object, function(?Object):void):void} [opts.onPermission]
- *        called with (payload, settle); settle(envelope|null) writes the reply.
- *        settle(envelope) -> 200 JSON (blocking decision); settle(null) -> 204
- *        no-decision (native fallback). settle is idempotent.
- * @returns {Promise<{port:number, host:string, url:string, close:function():Promise<void>}>}
+ * @param opts.port          0 = OS-assigned ephemeral port
+ * @param opts.host          defaults to "127.0.0.1"
+ * @param opts.onEvent       called with each /state payload
+ * @param opts.onPermission  called with (payload, settle); settle(envelope|null)
+ *        writes the reply. settle(envelope) -> 200 JSON (blocking decision);
+ *        settle(null) -> 204 no-decision (native fallback). settle is idempotent.
  */
-function startServer(opts = {}) {
+function startServer(
+  opts: {
+    port?: number;
+    host?: string;
+    onEvent?: (payload: WirePayload) => void;
+    onPermission?: (payload: WirePayload, settle: (env: object | null) => void) => void;
+  } = {}
+): Promise<{
+  port: number;
+  host: string;
+  url: string;
+  close: () => Promise<void>;
+}> {
   const host = opts.host || "127.0.0.1";
   const onEvent = typeof opts.onEvent === "function" ? opts.onEvent : () => {};
   const onPermission =
@@ -45,7 +54,7 @@ function startServer(opts = {}) {
 
   // Held permission requests keyed by id, so POST /permission/:id/resolve can
   // settle the still-open hook request from the UI side (docs/05 §5).
-  const held = new Map(); // id -> { settle(envelope|null), payload }
+  const held = new Map<string, { settle: (env: object | null) => void; payload: WirePayload }>(); // id -> { settle(envelope|null), payload }
   let seq = 0;
 
   const server = http.createServer((req, res) => {
@@ -63,7 +72,7 @@ function startServer(opts = {}) {
       res.end();
       readBody(req)
         .then((body) => {
-          let payload;
+          let payload: WirePayload;
           try {
             payload = JSON.parse(body);
           } catch {
@@ -82,7 +91,7 @@ function startServer(opts = {}) {
     if (method === "POST" && url === "/permission") {
       return readBody(req)
         .then((body) => {
-          let payload;
+          let payload: WirePayload;
           try {
             payload = JSON.parse(body);
           } catch {
@@ -95,7 +104,7 @@ function startServer(opts = {}) {
 
           const id = pickId(payload, ++seq);
           let settled = false;
-          const settle = (envelope) => {
+          const settle = (envelope: object | null) => {
             if (settled) return;
             settled = true;
             held.delete(id);
@@ -131,7 +140,7 @@ function startServer(opts = {}) {
       // request. Ack the UI immediately with 204; the held hook request gets
       // the actual decision body.
       return readBody(req).then((body) => {
-        let decision = null;
+        let decision: any = null;
         try {
           decision = body ? JSON.parse(body) : null;
         } catch {
@@ -173,7 +182,7 @@ function startServer(opts = {}) {
     host,
     url: `http://${host}:${port}`,
     close: () =>
-      new Promise((resolve) => {
+      new Promise<void>((resolve) => {
         drainHeld();
         // Drop idle keep-alive sockets so close() resolves promptly and never
         // leaves a lingering handle (Node 18.2+).
@@ -187,17 +196,18 @@ function startServer(opts = {}) {
  * Listen on `port`; if a *fixed* port is in use, probe a window of nearby
  * ports (docs/05 §5 collision discovery). Port 0 lets the OS choose and never
  * collides, so it returns on the first listen.
- * @param {import('node:http').Server} server
- * @param {number} port
- * @param {string} host
- * @returns {Promise<number>} the actually-bound port
+ * @returns the actually-bound port
  */
-function listenWithProbe(server, port, host) {
+function listenWithProbe(
+  server: http.Server,
+  port: number,
+  host: string
+): Promise<number> {
   return new Promise((resolve, reject) => {
     let attempt = 0;
     const start = port;
 
-    const onError = (err) => {
+    const onError = (err: NodeJS.ErrnoException) => {
       // Only walk forward for a busy *fixed* port; everything else is fatal.
       if (err && err.code === "EADDRINUSE" && start !== 0 && attempt < PORT_PROBE_TRIES) {
         attempt += 1;
@@ -220,7 +230,7 @@ function listenWithProbe(server, port, host) {
       server.removeListener("listening", onListening);
     }
 
-    function tryListen(p) {
+    function tryListen(p: number) {
       server.listen(p, host);
     }
 
@@ -232,11 +242,8 @@ function listenWithProbe(server, port, host) {
 
 /**
  * Derive a stable id for a held permission request.
- * @param {Object} payload
- * @param {number} fallbackSeq
- * @returns {string}
  */
-function pickId(payload, fallbackSeq) {
+function pickId(payload: WirePayload, fallbackSeq: number): string {
   if (payload && typeof payload === "object") {
     if (typeof payload.id === "string" && payload.id) return payload.id;
     if (typeof payload.sessionId === "string" && payload.sessionId) {
@@ -246,11 +253,7 @@ function pickId(payload, fallbackSeq) {
   return `perm-${fallbackSeq}`;
 }
 
-/**
- * @param {import('node:http').IncomingMessage} req
- * @returns {Promise<string>}
- */
-function readBody(req) {
+function readBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve) => {
     let data = "";
     let tooBig = false;
@@ -269,12 +272,11 @@ function readBody(req) {
   });
 }
 
-/**
- * @param {import('node:http').ServerResponse} res
- * @param {number} status
- * @param {?Object} obj
- */
-function sendJson(res, status, obj) {
+function sendJson(
+  res: http.ServerResponse,
+  status: number,
+  obj: object | null
+): void {
   if (res.writableEnded || res.headersSent) return;
   res.statusCode = status;
   if (obj == null || status === 204) {
@@ -285,4 +287,4 @@ function sendJson(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
-module.exports = { startServer };
+export { startServer };
