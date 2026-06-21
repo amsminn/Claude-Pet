@@ -38,7 +38,9 @@ else
 fi
 
 info "Looking up the release for ${ARCH_TOKEN}…"
-JSON="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API")" \
+# Retry transient GitHub API hiccups (e.g. a 504 gateway timeout).
+JSON="$(curl -fsSL --retry 3 --retry-delay 1 --retry-all-errors \
+  -H 'Accept: application/vnd.github+json' "$API")" \
   || err "could not reach the GitHub Releases API."
 
 TAG="$(printf '%s' "$JSON" | grep '"tag_name"' | head -1 | cut -d '"' -f4 || true)"
@@ -50,7 +52,8 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 info "Downloading ${TAG} (${ARCH_TOKEN})…"
-curl -fL --progress-bar "$URL" -o "$TMP/app.zip" || err "download failed."
+curl -fL --retry 3 --retry-delay 1 --retry-all-errors --progress-bar \
+  "$URL" -o "$TMP/app.zip" || err "download failed."
 
 info "Unpacking…"
 ditto -x -k "$TMP/app.zip" "$TMP/unpacked" || err "could not unpack the archive."
