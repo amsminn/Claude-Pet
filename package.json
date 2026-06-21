@@ -45,7 +45,8 @@
     "publish": {
       "provider": "github",
       "owner": "amsminn",
-      "repo": "Claude-Pet"
+      "repo": "Claude-Pet",
+      "releaseType": "release"
     }
   }
 }
