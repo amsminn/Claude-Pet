@@ -78,7 +78,7 @@ function pickEvent(p: WirePayload): string | undefined {
   );
 }
 
-/** title | session_title | sessionTitle | customTitle | agentName */
+/** title | session_title | … | prompt (UserPromptSubmit's submitted text) */
 function pickTitle(p: WirePayload): string | undefined {
   return firstStr(
     p &&
@@ -88,7 +88,11 @@ function pickTitle(p: WirePayload): string | undefined {
         p.customTitle ??
         p.custom_title ??
         p.agentName ??
-        p.agent_name)
+        p.agent_name ??
+        // UserPromptSubmit carries the user's prompt here (real Claude Code hook).
+        p.prompt ??
+        p.user_prompt ??
+        p.userPrompt)
   );
 }
 
@@ -199,8 +203,20 @@ function applyEvent(store: Store, payload: WirePayload): SessionState {
   const title = pickTitle(p);
   if (title) s.title = redactTitle(title);
 
+  // Explicit payload body wins; otherwise derive it from the transcript tail —
+  // the last assistant text (§3.3). Real Claude Code hooks carry no body field,
+  // so without this the card body stays empty. Never blanks a prior body (the
+  // derive only applies when it found non-empty assistant text).
   const body = pickBody(p);
-  if (body) s.body = clampBody(redactSecrets(body));
+  if (body) {
+    s.body = clampBody(redactSecrets(body));
+  } else {
+    const transcriptPath = pickTranscriptPath(p);
+    if (transcriptPath) {
+      const derived = extractCardBody(transcriptPath);
+      if (derived) s.body = derived;
+    }
+  }
 
   return s;
 }

@@ -400,6 +400,40 @@ test("extractCardBody keeps a full record when the tail window starts on a line 
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+// ── real Claude Code hook fields: prompt -> title, transcript -> body ──
+test("UserPromptSubmit fills the card title from the `prompt` field (real hook shape)", () => {
+  const store = state.createStore();
+  state.applyEvent(store, {
+    hook_event_name: "UserPromptSubmit",
+    session_id: "A",
+    prompt: "fix the login bug please",
+  });
+  assert.equal(store.sessions.get("A")!.title, "fix the login bug please");
+});
+
+test("applyEvent derives the card body from the transcript tail when the payload has no body", () => {
+  const dir = tmp();
+  const file = writeJsonl(dir, [
+    { message: { role: "user", content: "hi" } },
+    { message: { role: "assistant", content: [{ type: "text", text: "here is the answer" }] } },
+  ]);
+  const store = state.createStore();
+  state.applyEvent(store, { hook_event_name: "Stop", session_id: "A", transcript_path: file });
+  assert.equal(store.sessions.get("A")!.body, "here is the answer");
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("an explicit payload body still wins over the transcript tail", () => {
+  const dir = tmp();
+  const file = writeJsonl(dir, [
+    { message: { role: "assistant", content: [{ type: "text", text: "from transcript" }] } },
+  ]);
+  const store = state.createStore();
+  state.applyEvent(store, { kind: "Stop", sessionId: "A", body: "explicit body", transcript_path: file });
+  assert.equal(store.sessions.get("A")!.body, "explicit body");
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 // ── regression: a repeat/late Stop must not re-promote an already-done card ──
 test("repeat Stop on an already-attention card does not re-stamp completedAt", () => {
   const store = state.createStore();
