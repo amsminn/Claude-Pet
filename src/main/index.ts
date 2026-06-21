@@ -110,13 +110,9 @@ function wireIpc(): void {
   // relaunch (keeps the quarantine-free path; no browser download).
   ipcMain.on(C.IPC.RUN_UPDATE, () => runUpdater());
 
-  // Right-click the pet -> native menu (대화 모드 toggle · 펫 닫기).
+  // Right-click the pet -> native menu (펫 닫기).
   ipcMain.on(C.IPC.SHOW_PET_MENU, () => {
-    const menu = Menu.buildFromTemplate([
-      { label: "대화 모드 (답장 주입)", type: "checkbox", checked: replyMode, click: () => toggleReplyMode() },
-      { type: "separator" },
-      { label: "펫 닫기", click: () => app.quit() },
-    ]);
+    const menu = Menu.buildFromTemplate([{ label: "펫 닫기", click: () => app.quit() }]);
     menu.popup({ window: petWindow ?? undefined });
   });
 
@@ -218,24 +214,6 @@ async function startLocalServer(): Promise<void> {
   });
 }
 
-/**
- * Toggle 대화 모드: (de)register the blocking Stop -> /reply hook, and drain any
- * held replies when turning off so a session never hangs after opt-out. Never throws.
- */
-function toggleReplyMode(): void {
-  replyMode = !replyMode;
-  if (!replyMode) {
-    for (const [sessionId, id] of replySession) bridge.cancel(id);
-    replySession.clear();
-  }
-  if (!HOOKS_DISABLED && httpServer) {
-    try {
-      hooksInstall.installHooks({ port: httpServer.port, host: httpServer.host, reply: replyMode });
-    } catch {
-      /* a broken settings.json must not crash the toggle */
-    }
-  }
-}
 
 /**
  * Extract a wire-supplied permission request id, if any, from a hook payload.

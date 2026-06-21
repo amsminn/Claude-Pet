@@ -164,6 +164,10 @@ body {
   border-radius: 999px; padding: 6px 14px; box-shadow: 0 2px 7px rgba(0,0,0,.14);
 }
 .card__replyBtn:hover { background: #E2E2E6; }
+/* Free-text reply can't reach a running session without blocking the Stop hook
+   (no official injection channel), so the reply button stays hidden — the pet
+   is a monitor. The reply field below is unreachable as a result. */
+.card__replyBtn { display: none; }
 /* 펼치기 = 정식 표면: 흰색 텍스트 pill (bottom-right overhang) */
 .card__expand {
   margin: 0; font: inherit; font-size: calc(12px * var(--ui-scale)); font-weight: 600; cursor: pointer; white-space: nowrap;

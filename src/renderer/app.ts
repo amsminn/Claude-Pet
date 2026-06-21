@@ -34,6 +34,7 @@ let curPetRow: number = ROW.idle;
 let widgetHovered = false; // whether the cursor is over the widget (drives collapse)
 let dragging = false; // whether the pet is being dragged (don't collapse / disable click-through mid-drag)
 const frameCounts: Record<number, number> = {}; // atlas row -> autoDetectFrames result
+let idleAlpha: Uint8ClampedArray | null = null; // idle frame RGBA, for the per-pixel hover hit test
 const cardLocal = new Map<string, CardLocal>(); // sessionId -> { expanded, replying, truncatable }
 
 function iconFor(s: SessionState): string {
@@ -249,9 +250,23 @@ function paintCard(el: CardEl, s: SessionState, { latest, plusN = 0 }: { latest:
 // endless loop.
 const petEl = $("pet");
 const HOVER_ROW = ROW.waving;
-let hoverShot = false; // cursor is over the pet -> play a one-shot wave
-petEl.addEventListener("mouseenter", () => (hoverShot = true));
-petEl.addEventListener("mouseleave", () => (hoverShot = false));
+let hoverShot = false; // cursor is over the pet's VISIBLE pixels -> one-shot wave
+
+// Per-pixel hit test: sample the idle sprite's alpha so the wave only fires over
+// the pet's actual pixels, not the transparent margins of its bounding box.
+function isOverPet(clientX: number, clientY: number): boolean {
+  if (!idleAlpha) return true; // before the sprite decodes: fall back to the box
+  const rect = petEl.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return true;
+  const fx = Math.floor(((clientX - rect.left) / rect.width) * FRAME_W);
+  const fy = Math.floor(((clientY - rect.top) / rect.height) * FRAME_H);
+  if (fx < 0 || fx >= FRAME_W || fy < 0 || fy >= FRAME_H) return false;
+  return idleAlpha[(fy * FRAME_W + fx) * 4 + 3] > 16;
+}
+petEl.addEventListener("pointermove", (e) => {
+  if (!dragging) hoverShot = isOverPet(e.clientX, e.clientY);
+});
+petEl.addEventListener("pointerleave", () => (hoverShot = false));
 // Right-click the pet -> native "펫 닫기" menu (Codex parity).
 petEl.addEventListener("contextmenu", (e) => {
   e.preventDefault();
@@ -436,6 +451,8 @@ function detectFrames(image: HTMLImageElement): void {
   cv.height = image.naturalHeight;
   const cx = cv.getContext("2d", { willReadFrequently: true })!;
   cx.drawImage(image, 0, 0);
+  // Idle frame (row 0, col 0) alpha — the silhouette used for the hover hit test.
+  idleAlpha = cx.getImageData(0, 0, FRAME_W, FRAME_H).data;
   for (let r = 0; r < rows; r++) {
     let lastNonEmpty = 0;
     for (let c = 0; c < cols; c++) {
