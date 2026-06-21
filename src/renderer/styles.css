@@ -260,6 +260,9 @@ body {
   padding: 9px 12px;
   animation: cardIn .26s cubic-bezier(.2,.8,.2,1);
 }
+/* `.update-toast { display:flex }` ties [hidden] on specificity and wins by
+   source order, so the hidden attribute is ignored without this. (0,2,0) > (0,1,0). */
+.update-toast[hidden] { display: none; }
 .update-toast__text {
   flex: 1; min-width: 0;
   font-size: var(--body-size); font-weight: 500; color: var(--body-color);
