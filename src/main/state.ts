@@ -106,6 +106,17 @@ function pickTranscriptPath(p: WirePayload): string | undefined {
   return firstStr(p && (p.transcriptPath ?? p.transcript_path ?? p.transcript));
 }
 
+/** cwd | cwd path — used for a project-name fallback title. */
+function pickCwd(p: WirePayload): string | undefined {
+  return firstStr(p && (p.cwd ?? p.workingDir ?? p.working_dir));
+}
+
+/** Last path segment of a directory (the project folder name), or "". */
+function basename(dir: string): string {
+  const parts = dir.replace(/[/\\]+$/, "").split(/[/\\]/);
+  return parts[parts.length - 1] || "";
+}
+
 /** Normalize a permission descriptor from several plausible shapes. */
 function pickPerm(p: WirePayload): PendingPermission | null {
   if (!p) return null;
@@ -200,8 +211,15 @@ function applyEvent(store: Store, payload: WirePayload): SessionState {
   }
 
   // ── title/body upsert — never blank out a previously set value (§0.1) ──────
+  // A real title (UserPromptSubmit's prompt) always wins; otherwise fall back to
+  // the project folder name (cwd basename) so a card is never just "(제목 없음)".
   const title = pickTitle(p);
-  if (title) s.title = redactTitle(title);
+  if (title) {
+    s.title = redactTitle(title);
+  } else if (!s.title) {
+    const cwd = pickCwd(p);
+    if (cwd) s.title = redactTitle(basename(cwd));
+  }
 
   // Explicit payload body wins; otherwise derive it from the transcript tail —
   // the last assistant text (§3.3). Real Claude Code hooks carry no body field,

@@ -44,6 +44,10 @@ const api: ClaudePetBridge = {
     ipcRenderer.send(C.IPC.RUN_UPDATE);
   },
 
+  showPetMenu(): void {
+    ipcRenderer.send(C.IPC.SHOW_PET_MENU);
+  },
+
   setInteractive(interactive: boolean): void {
     ipcRenderer.send(C.IPC.SET_INTERACTIVE, !!interactive);
   },

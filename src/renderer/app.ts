@@ -183,8 +183,14 @@ function buildCard(id: string): CardEl {
   };
   el.querySelector<HTMLButtonElement>(".reply__send")!.onclick = send;
   const replyInput = el.querySelector<HTMLInputElement>(".reply input")!;
+  const cancelReply = (): void => {
+    local(id).replying = false;
+    bridge?.setReplyFocus(false);
+    render();
+  };
   replyInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") send();
+    else if (e.key === "Escape") cancelReply(); // intuitive close without sending
   });
   replyInput.addEventListener("blur", () => bridge?.setReplyFocus(false));
   return el;
@@ -243,6 +249,11 @@ const HOVER_ROW = ROW.waving;
 let hoverShot = false; // cursor is over the pet -> play a one-shot wave
 petEl.addEventListener("mouseenter", () => (hoverShot = true));
 petEl.addEventListener("mouseleave", () => (hoverShot = false));
+// Right-click the pet -> native "펫 닫기" menu (Codex parity).
+petEl.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  bridge?.showPetMenu();
+});
 
 // ── pet drag (move between dual monitors) ──
 //    Pointer capture keeps move events flowing even when the cursor leaves the

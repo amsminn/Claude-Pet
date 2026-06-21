@@ -7,7 +7,7 @@
  * below (state, permission, assets, server, hooks-install) is electron-free and
  * unit-tested with `node --test`.
  */
-import { app, ipcMain, shell, BrowserWindow } from "electron";
+import { app, ipcMain, shell, Menu, BrowserWindow } from "electron";
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -103,6 +103,14 @@ function wireIpc(): void {
   // Update toast "Update" button -> run the install one-liner in Terminal and
   // relaunch (keeps the quarantine-free path; no browser download).
   ipcMain.on(C.IPC.RUN_UPDATE, () => runUpdater());
+
+  // Right-click the pet -> native menu (펫 닫기 = quit the app).
+  ipcMain.on(C.IPC.SHOW_PET_MENU, () => {
+    const menu = Menu.buildFromTemplate([
+      { label: "펫 닫기", click: () => app.quit() },
+    ]);
+    menu.popup({ window: petWindow ?? undefined });
+  });
 
   ipcMain.on(C.IPC.SEND_REPLY, (_e, payload) => {
     // Phase 0: no Claude Code to deliver to; just log + keep state coherent.

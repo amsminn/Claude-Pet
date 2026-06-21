@@ -142,6 +142,8 @@ export interface ClaudePetBridge {
   onUpdateAvailable(cb: (info: UpdateInfo) => void): () => void;
   /** Run the install one-liner in Terminal and relaunch (the toast's Update button). */
   runUpdate(): void;
+  /** Pop the native right-click menu over the pet (펫 닫기). */
+  showPetMenu(): void;
   /** Toggle window click-through on #widget enter/leave. */
   setInteractive(interactive: boolean): void;
   /** Promote/demote the panel's key focus while a reply field is open. */

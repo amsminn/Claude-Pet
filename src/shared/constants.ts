@@ -117,6 +117,7 @@ export const IPC = Object.freeze({
   DRAG_END: "pet:drag-end", // renderer -> main: end drag (pins position, disables auto re-anchor)
   UPDATE_AVAILABLE: "pet:update-available", // main -> renderer  (UpdateInfo): a newer GitHub release exists
   RUN_UPDATE: "pet:run-update", // renderer -> main: run the install one-liner in Terminal + relaunch
+  SHOW_PET_MENU: "pet:show-menu", // renderer -> main: pop the native right-click menu (펫 닫기)
 });
 
 // ── wire / protocol tags (docs/05 §3.2, §5) ────────────────────────────────

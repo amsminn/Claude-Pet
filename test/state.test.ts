@@ -411,6 +411,19 @@ test("UserPromptSubmit fills the card title from the `prompt` field (real hook s
   assert.equal(store.sessions.get("A")!.title, "fix the login bug please");
 });
 
+test("title falls back to the project (cwd basename) when no prompt is known", () => {
+  const store = state.createStore();
+  state.applyEvent(store, { hook_event_name: "PreToolUse", session_id: "A", cwd: "/Users/me/dev/timetree" });
+  assert.equal(store.sessions.get("A")!.title, "timetree");
+});
+
+test("a real prompt still wins over the cwd fallback title", () => {
+  const store = state.createStore();
+  state.applyEvent(store, { hook_event_name: "PreToolUse", session_id: "A", cwd: "/Users/me/dev/timetree" });
+  state.applyEvent(store, { hook_event_name: "UserPromptSubmit", session_id: "A", prompt: "real prompt" });
+  assert.equal(store.sessions.get("A")!.title, "real prompt");
+});
+
 test("applyEvent derives the card body from the transcript tail when the payload has no body", () => {
   const dir = tmp();
   const file = writeJsonl(dir, [
