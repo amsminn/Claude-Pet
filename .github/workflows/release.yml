@@ -37,7 +37,19 @@ jobs:
       - run: npm test
       - run: npm run typecheck
 
-      - name: Build + publish (arm64 + x64, ad-hoc signed)
+      # Build only — do NOT let electron-builder publish. Its multi-arch
+      # publisher races (two parallel "create release" calls collide) and can
+      # exit before the large zips finish uploading, leaving a release with only
+      # the small blockmaps. We upload via gh instead (single, synchronous).
+      - name: Build (arm64 + x64, ad-hoc signed)
+        run: npm run dist -- --mac --arm64 --x64 --publish never
+
+      - name: Publish release (single synchronous upload, no race)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run dist -- --mac --arm64 --x64 --publish always
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            ./dist/*.zip
+          gh release upload "$GITHUB_REF_NAME" ./dist/*.blockmap ./dist/latest-mac.yml --clobber || true
