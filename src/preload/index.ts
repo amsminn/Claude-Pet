@@ -11,6 +11,7 @@ import type {
   PermissionDecision,
   ReplyPayload,
   StatePayload,
+  UpdateInfo,
 } from "../shared/types";
 
 const api: ClaudePetBridge = {
@@ -31,6 +32,16 @@ const api: ClaudePetBridge = {
     const handler = (_event: IpcRendererEvent, payload: StatePayload): void => cb(payload);
     ipcRenderer.on(C.IPC.STATE, handler);
     return () => ipcRenderer.removeListener(C.IPC.STATE, handler);
+  },
+
+  onUpdateAvailable(cb: (info: UpdateInfo) => void): () => void {
+    const handler = (_event: IpcRendererEvent, info: UpdateInfo): void => cb(info);
+    ipcRenderer.on(C.IPC.UPDATE_AVAILABLE, handler);
+    return () => ipcRenderer.removeListener(C.IPC.UPDATE_AVAILABLE, handler);
+  },
+
+  openUpdate(): void {
+    ipcRenderer.send(C.IPC.OPEN_UPDATE);
   },
 
   setInteractive(interactive: boolean): void {

@@ -1,6 +1,7 @@
 # Internal working material — never committed to the public repo (local-only)
 refs/
 .omo/
+docs/superpowers/
 
 # OS / editor
 .DS_Store

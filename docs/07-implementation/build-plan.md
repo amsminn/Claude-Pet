@@ -88,9 +88,21 @@ The research explicitly warns: the following are not confirmed by primary docs, 
 
 `--ui-scale` injection (scaleFactor + accessibility, live reaction) · finalized sprite perf (apply the rAF vs CSS steps measurement result) · multi-monitor/drag/edge cases · pet picker (multiple pets).
 
-## Phase 4 — Packaging and distribution (v2)
+## Phase 4 — Packaging and distribution
 
-electron-builder macOS code signing + notarization · DMG/zip · auto-update (electron-updater) · always-on-top/accessibility permission prompts · Windows/Linux click-through/transparent-window spike.
+**Shipped (free path):** macOS is distributed as a `curl | bash` one-liner that installs/upgrades an
+ad-hoc-signed (free — no Apple Developer ID) `.zip` from GitHub Releases. Because command-line downloads
+are not quarantined by macOS, the app launches with no Gatekeeper "unidentified developer" prompt; the
+installer also strips `com.apple.quarantine` defensively. Re-running the one-liner upgrades in place
+(nvm/rustup model). A pure `update-check.ts` core polls the Releases API and surfaces a newer release in a
+pet-UI toast; `.github/workflows/release.yml` builds + publishes arm64/x64 zips on a `v*` tag push. The
+`dmg` target is dropped. `` `Inferred` `` premises (curl is quarantine-free; arm64 runs ad-hoc-signed) are
+verified on a real Mac before the first tag.
+
+**Deferred (needs a paid cert / more work):** Developer-ID signing + notarization · silent
+background-download + install-on-quit auto-update (electron-updater / Squirrel.Mac requires a valid
+signature) — or the free near-silent self-replacing updater · always-on-top/accessibility permission
+prompts · Windows/Linux click-through/transparent-window spike.
 
 ---
 

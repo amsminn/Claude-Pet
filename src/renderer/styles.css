@@ -246,3 +246,32 @@ body {
   padding: 6px 11px; border-radius: 14px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.25);
   animation: cardIn .2s ease;
 }
+
+/* ── update toast (new release available) — reuses the locked card tokens ──
+   New element (not in the prototype); kept visually consistent with cards. It
+   sits above the pet and stays visible even when the stack is collapsed. */
+.update-toast {
+  width: var(--card-w);
+  margin: 0 8px 4px;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--card-bg);
+  border-radius: 14px;
+  box-shadow: var(--card-shadow);
+  padding: 9px 12px;
+  animation: cardIn .26s cubic-bezier(.2,.8,.2,1);
+}
+.update-toast__text {
+  flex: 1; min-width: 0;
+  font-size: var(--body-size); font-weight: 500; color: var(--body-color);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.update-toast__text span { font-weight: 680; color: var(--title-color); }
+.update-toast__actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.update-toast__btn {
+  font-size: calc(11.5px * var(--ui-scale)); font-weight: 600;
+  border: none; border-radius: 9px; padding: 5px 10px; cursor: pointer;
+  color: var(--label-color); background: transparent;
+}
+.update-toast__btn:hover { background: rgba(0,0,0,.05); }
+.update-toast__btn--primary { color: #fff; background: var(--title-color); }
+.update-toast__btn--primary:hover { background: #000; }

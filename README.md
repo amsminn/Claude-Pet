@@ -26,6 +26,23 @@ Claude-Pet is a floating desktop companion that turns Claude Code's live activit
 > [!TIP]
 > Pet sprites load natively from `~/.codex/pets/`. Drop in any Codex-compatible pet and Claude-Pet animates it; with no pet installed it falls back to a 🐾.
 
+## Install (macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/amsminn/Claude-Pet/main/scripts/install.sh | bash
+```
+
+Installs (or upgrades) Claude-Pet into `/Applications` and launches it. **Re-run the same command to update** — the app also shows a toast when a newer release is out.
+
+It is delivered over `curl`, so macOS does not quarantine it and it launches with no Gatekeeper "unidentified developer" prompt (the app is free, ad-hoc-signed — not notarized). Prefer to read before you run? Fetch and inspect the script first:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/amsminn/Claude-Pet/main/scripts/install.sh
+less install.sh && bash install.sh
+```
+
+> Apple Silicon + Intel. Windows/Linux are not supported yet.
+
 ## Quickstart
 
 ```bash

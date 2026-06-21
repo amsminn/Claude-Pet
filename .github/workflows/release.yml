@@ -1,0 +1,43 @@
+name: release
+
+# Tag a version (vX.Y.Z must equal package.json "version") to cut a release:
+#   git tag v0.1.0 && git push origin v0.1.0
+# Builds the macOS arm64 + x64 zips (free ad-hoc signing — no Developer ID, no
+# notarization) and publishes them to the GitHub Release. install.sh pulls them.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # create/upload the GitHub Release
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Guard — tag matches package.json version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::tag '$TAG' != package.json version '$PKG'"
+            exit 1
+          fi
+
+      - run: npm ci
+
+      - run: npm test
+      - run: npm run typecheck
+
+      - name: Build + publish (arm64 + x64, ad-hoc signed)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run dist -- --mac --arm64 --x64 --publish always

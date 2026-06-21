@@ -106,6 +106,13 @@ export interface ReplyPayload {
   message: string;
 }
 
+/** A newer GitHub release, surfaced to the renderer's update toast (main -> renderer). */
+export interface UpdateInfo {
+  version: string;
+  url: string;
+  notes: string;
+}
+
 /** Permission decision from the card UI (renderer -> main). */
 export interface PermissionDecisionPayload {
   id: string;
@@ -131,6 +138,10 @@ export interface ClaudePetBridge {
   constants: BridgeConstants;
   /** Subscribe to state snapshots pushed from main; returns an unsubscribe fn. */
   onState(cb: (payload: StatePayload) => void): () => void;
+  /** Subscribe to "a newer release is available"; returns an unsubscribe fn. */
+  onUpdateAvailable(cb: (info: UpdateInfo) => void): () => void;
+  /** Open the release page in the default browser (the toast's Update button). */
+  openUpdate(): void;
   /** Toggle window click-through on #widget enter/leave. */
   setInteractive(interactive: boolean): void;
   /** Promote/demote the panel's key focus while a reply field is open. */

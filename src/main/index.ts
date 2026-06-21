@@ -7,7 +7,7 @@
  * below (state, permission, assets, server, hooks-install) is electron-free and
  * unit-tested with `node --test`.
  */
-import { app, ipcMain, BrowserWindow } from "electron";
+import { app, ipcMain, shell, BrowserWindow } from "electron";
 
 import * as C from "../shared/constants";
 import * as win from "./window";
@@ -16,8 +16,15 @@ import * as state from "./state";
 import * as permission from "./permission";
 import * as server from "./server";
 import * as hooksInstall from "./hooks-install";
+import * as updateCheck from "./update-check";
 import { SCENARIOS } from "./mock-scenarios";
 import type { PetAsset, PermissionDecision, StatePayload, WirePayload } from "../shared/types";
+
+// Update channel — poll the GitHub Releases API and surface a newer release in
+// the pet UI (install/upgrade itself is the `curl | bash` one-liner). Best-effort
+// and strictly additive: failures never touch the hook/permission/session paths.
+const UPDATE_REPO = "amsminn/Claude-Pet";
+const UPDATE_POLL_MS = 6 * 60 * 60 * 1000; // 6h
 
 // Hook wiring is opt-out via env so a headless/demo launch can run without
 // touching ~/.claude/settings.json (Phase 0 mock playback). Default = install.
@@ -38,6 +45,8 @@ let httpServer: Awaited<ReturnType<typeof server.startServer>> | null = null;
 let hooksInstalled = false; // true once installHooks has registered our hooks
 let petAsset: PetAsset | null = null; // resolved sprite descriptor or null (renderer falls back to 🐾)
 let mockTimers: NodeJS.Timeout[] = [];
+let updateUrl: string | null = null; // release page for the latest available update (OPEN_UPDATE target)
+let updateTimer: NodeJS.Timeout | null = null;
 
 /**
  * Push the current snapshot (+ resolved pet asset) to the renderer.
@@ -83,6 +92,11 @@ function wireIpc(): void {
   ipcMain.on(C.IPC.DRAG_START, () => win.startDrag(petWindow));
   ipcMain.on(C.IPC.DRAG_MOVE, () => win.dragMove(petWindow));
   ipcMain.on(C.IPC.DRAG_END, () => win.endDrag());
+
+  // Update toast "Update" button -> open the release page in the browser.
+  ipcMain.on(C.IPC.OPEN_UPDATE, () => {
+    if (updateUrl) shell.openExternal(updateUrl);
+  });
 
   ipcMain.on(C.IPC.SEND_REPLY, (_e, payload) => {
     // Phase 0: no Claude Code to deliver to; just log + keep state coherent.
@@ -259,6 +273,46 @@ function teardownHooks(): void {
   hooksInstalled = false;
 }
 
+// ── update check ────────────────────────────────────────────────────────────
+/**
+ * Fetch the GitHub Releases list, run the pure `pickUpdate` core against the
+ * running version, and — if a newer stable release exists — push it to the
+ * renderer's update toast. Best-effort: any failure (offline, rate-limited,
+ * malformed) is swallowed; the update path is never load-bearing.
+ */
+async function checkForUpdate(): Promise<void> {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases`, {
+      headers: { Accept: "application/vnd.github+json", "User-Agent": "Claude-Pet" },
+    });
+    if (!res.ok) return;
+    const releases = await res.json();
+    const r = updateCheck.pickUpdate({ currentVersion: app.getVersion(), releases });
+    if (!r.available || !r.url) return;
+    updateUrl = r.url;
+    if (petWindow && !petWindow.isDestroyed()) {
+      petWindow.webContents.send(C.IPC.UPDATE_AVAILABLE, {
+        version: r.version,
+        url: r.url,
+        notes: r.notes ?? "",
+      });
+    }
+  } catch {
+    /* update checking is best-effort; never affects the session paths */
+  }
+}
+
+/**
+ * Start update polling — only for the packaged app (skip in `npm run dev` /
+ * tests), opt-out via CLAUDE_PET_NO_UPDATE_CHECK=1.
+ */
+function maybeStartUpdateChecks(): void {
+  if (!app.isPackaged) return;
+  if (/^(1|true|yes)$/i.test(process.env.CLAUDE_PET_NO_UPDATE_CHECK || "")) return;
+  void checkForUpdate();
+  updateTimer = setInterval(() => void checkForUpdate(), UPDATE_POLL_MS);
+}
+
 // ── lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
   resolvePetAsset();
@@ -269,6 +323,7 @@ app.whenReady().then(async () => {
   petWindow = win.createPetWindow();
   petWindow.webContents.once("did-finish-load", () => {
     pushState();
+    maybeStartUpdateChecks(); // packaged-app only; surfaces a newer GitHub release
     // Phase 0: replay a mock so the renderer is visible WITHOUT Claude Code.
     // When hooks are live, real /state events drive the store instead.
     if (HOOKS_DISABLED) replayScenario("single");
@@ -292,6 +347,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", async () => {
   clearMock();
+  if (updateTimer) clearInterval(updateTimer);
   teardownHooks(); // uninstall our hooks so Claude Code stops POSTing
   if (httpServer) await httpServer.close();
 });
