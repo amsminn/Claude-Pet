@@ -234,20 +234,31 @@ function paintCard(el: CardEl, s: SessionState, { latest, plusN = 0 }: { latest:
 }
 
 // ── pet sprite animation ──
+// Playback modes follow the asset spec (docs/02 §4.3): idle=pingpong,
+// running/waiting/review=loop, waving/jumping=once→idle, failed=hold(last frame).
+// Hover plays a one-shot wave (greeting once, then settles back to idle), not an
+// endless loop.
 const petEl = $("pet");
-let hovering = false;
-petEl.addEventListener("mouseenter", () => (hovering = true));
-petEl.addEventListener("mouseleave", () => (hovering = false));
 const HOVER_ROW = ROW.waving;
+let hoverShot = false; // cursor is over the pet -> play a one-shot wave
+petEl.addEventListener("mouseenter", () => (hoverShot = true));
+petEl.addEventListener("mouseleave", () => (hoverShot = false));
 
 // ── pet drag (move between dual monitors) ──
 //    Pointer capture keeps move events flowing even when the cursor leaves the
 //    pet. The main process tracks the window by the global cursor point, so it
 //    crosses monitor boundaries and survives HiDPI scale differences.
 let dragRAF = 0;
+let pinnedByClick = false; // a tap on the pet keeps the stack open (click affordance)
+let downX = 0,
+  downY = 0,
+  petMoved = false; // distinguishes a tap from a drag
 petEl.addEventListener("pointerdown", (e) => {
   if (e.button !== 0) return; // left button only
   dragging = true;
+  downX = e.clientX;
+  downY = e.clientY;
+  petMoved = false;
   try {
     petEl.setPointerCapture(e.pointerId);
   } catch {
@@ -256,8 +267,10 @@ petEl.addEventListener("pointerdown", (e) => {
   bridge?.dragStart();
   e.preventDefault();
 });
-petEl.addEventListener("pointermove", () => {
-  if (!dragging || dragRAF) return;
+petEl.addEventListener("pointermove", (e) => {
+  if (!dragging) return;
+  if (Math.abs(e.clientX - downX) > 4 || Math.abs(e.clientY - downY) > 4) petMoved = true;
+  if (dragRAF) return;
   dragRAF = requestAnimationFrame(() => {
     dragRAF = 0;
     bridge?.dragMove();
@@ -276,8 +289,19 @@ function endPetDrag(e: PointerEvent): void {
     /* ignore */
   }
   bridge?.dragEnd();
-  // After dropping, if the cursor is outside the widget, tidy up (collapse +
-  // restore click-through).
+  // A tap (no real movement) toggles the stack open — a reliable click target
+  // for the collapsed (1) badge, independent of the hover-to-expand path.
+  if (!petMoved) {
+    pinnedByClick = !pinnedByClick;
+    if (pinnedByClick) {
+      bridge?.setInteractive(true);
+      widget.classList.remove("is-collapsed");
+    }
+    render();
+    return;
+  }
+  // After dropping a real drag, if the cursor is outside the widget, tidy up
+  // (collapse + restore click-through).
   if (!widget.matches(":hover")) {
     if (bridge && !pinnedOpen()) bridge.setInteractive(false);
     if (!pinnedOpen()) widget.classList.add("is-collapsed");
@@ -290,11 +314,22 @@ let frame = 0,
   dir = 1,
   acc = 0,
   last = 0,
-  curRow = -1;
+  prevTarget = -1, // last state/hover row, to re-arm one-shots on entry
+  renderRow = -1, // the row actually being drawn (may differ once a clip settles)
+  oncePlayed = false; // a "once" clip for the current target has finished
 function tick(now: number): void {
-  const r = hovering ? HOVER_ROW : curPetRow;
-  if (r !== curRow) {
-    curRow = r;
+  // A hover wave overlays the state-driven row as a one-shot.
+  const target = hoverShot ? HOVER_ROW : curPetRow;
+  if (target !== prevTarget) {
+    prevTarget = target; // entering a row re-arms its one-shot
+    oncePlayed = false;
+  }
+  // A finished "once" clip settles back to idle (waving/jumping → idle); "hold"
+  // (failed) keeps its last frame; loop/pingpong play continuously.
+  const targetMode = (ROW_ANIM[target] || ROW_ANIM[ROW.idle]).mode;
+  const r = targetMode === "once" && oncePlayed ? ROW.idle : target;
+  if (r !== renderRow) {
+    renderRow = r;
     frame = 0;
     dir = 1;
     acc = 0;
@@ -308,8 +343,12 @@ function tick(now: number): void {
     if (isPingpong(r)) {
       frame += dir;
       if (frame >= fc - 1 || frame <= 0) dir *= -1;
+    } else if (a.mode === "once" || a.mode === "hold") {
+      if (frame < fc - 1) frame++;
+      else if (a.mode === "once") oncePlayed = true; // end reached → settle to idle next tick
+      // "hold": stay on the last frame
     } else {
-      frame = (frame + 1) % fc;
+      frame = (frame + 1) % fc; // loop
     }
   }
   if (frame >= fc) frame = 0;
@@ -328,7 +367,7 @@ function isReplying(): boolean {
   return [...cardLocal.values()].some((l) => l && l.replying);
 }
 function pinnedOpen(): boolean {
-  return hasPending() || isReplying();
+  return hasPending() || isReplying() || pinnedByClick;
 }
 widget.classList.add("is-collapsed"); // default rest state
 widget.addEventListener("mouseenter", () => {

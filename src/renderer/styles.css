@@ -50,7 +50,7 @@
   /* ── 펫 창 ── */
   --pet-frame-w: 192px;
   --pet-frame-h: 208px;
-  --pet-scale: 0.80;          /* 192*0.80 ≈ 154px CSS */
+  --pet-scale: 0.66;          /* 192*0.66 ≈ 127px CSS */
   --pet-margin-r: 14px;
   --pet-margin-b: 6px;
 }
@@ -202,12 +202,14 @@ body {
 
 /* 전역 접기 chevron */
 .collapse {
-  align-self: flex-end; margin: 0 6px 4px 0;
-  width: 34px; height: 34px; border-radius: 50%;
+  align-self: flex-end; margin: 0 8px -14px 0; /* smaller + tucked down toward the pet */
+  width: 26px; height: 26px; border-radius: 50%;
   background: rgba(40,42,52,.55); backdrop-filter: blur(6px);
   border: 1px solid rgba(255,255,255,.08); color: #d7dbe4; cursor: pointer;
   display: grid; place-items: center; transition: transform .2s, background .15s;
+  position: relative; z-index: 4;
 }
+.collapse svg { width: 16px; height: 16px; }
 .collapse:hover { background: rgba(56,60,74,.7); }
 .widget.is-collapsed .collapse svg { transform: rotate(180deg); }
 /* 접힘(rest) 상태 = 펫 + 카운트 배지만. ⌄ 버튼 숨김(Codex 동작, image #20) */
