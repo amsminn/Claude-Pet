@@ -392,8 +392,14 @@ widget.addEventListener("mouseleave", () => {
   if (!pinnedOpen() && !dragging) widget.classList.add("is-collapsed");
 });
 
-// ── manual collapse (⌄) ──
-$("collapse").onclick = () => widget.classList.toggle("is-collapsed");
+// ── manual collapse (⌄) — lives inside the pet now, so stop its pointer events
+//    from starting a pet drag/tap ──
+const collapseBtn = $("collapse");
+collapseBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+collapseBtn.onclick = (e) => {
+  e.stopPropagation();
+  widget.classList.toggle("is-collapsed");
+};
 
 // ── load the sprite (path from main) + 🐾 fallback + autoDetectFrames ──
 function applyPetAsset(asset: PetAsset | null | undefined): void {
