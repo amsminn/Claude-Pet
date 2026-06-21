@@ -40,8 +40,8 @@ const api: ClaudePetBridge = {
     return () => ipcRenderer.removeListener(C.IPC.UPDATE_AVAILABLE, handler);
   },
 
-  openUpdate(): void {
-    ipcRenderer.send(C.IPC.OPEN_UPDATE);
+  runUpdate(): void {
+    ipcRenderer.send(C.IPC.RUN_UPDATE);
   },
 
   setInteractive(interactive: boolean): void {

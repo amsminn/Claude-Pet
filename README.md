@@ -32,7 +32,7 @@ Claude-Pet is a floating desktop companion that turns Claude Code's live activit
 curl -fsSL https://raw.githubusercontent.com/amsminn/Claude-Pet/main/scripts/install.sh | bash
 ```
 
-Installs (or upgrades) Claude-Pet into `/Applications` and launches it. **Re-run the same command to update** — the app also shows a toast when a newer release is out.
+Installs (or upgrades) Claude-Pet into `/Applications` and launches it. When a newer release is out the pet shows an **Update** toast — clicking it re-runs this installer in Terminal and relaunches the app for you. You can also just **re-run the same command** any time to update.
 
 It is delivered over `curl`, so macOS does not quarantine it and it launches with no Gatekeeper "unidentified developer" prompt (the app is free, ad-hoc-signed — not notarized). Prefer to read before you run? Fetch and inspect the script first:
 

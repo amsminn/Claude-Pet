@@ -8,6 +8,10 @@
  * unit-tested with `node --test`.
  */
 import { app, ipcMain, shell, BrowserWindow } from "electron";
+import { spawn } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
 import * as C from "../shared/constants";
 import * as win from "./window";
@@ -25,6 +29,9 @@ import type { PetAsset, PermissionDecision, StatePayload, WirePayload } from "..
 // and strictly additive: failures never touch the hook/permission/session paths.
 const UPDATE_REPO = "amsminn/Claude-Pet";
 const UPDATE_POLL_MS = 6 * 60 * 60 * 1000; // 6h
+// Same `curl | bash` one-liner the README documents — always pulls the latest
+// release, replaces /Applications/Claude-Pet.app (no quarantine), and relaunches.
+const UPDATE_INSTALL_URL = `https://raw.githubusercontent.com/${UPDATE_REPO}/main/scripts/install.sh`;
 
 // Hook wiring is opt-out via env so a headless/demo launch can run without
 // touching ~/.claude/settings.json (Phase 0 mock playback). Default = install.
@@ -45,7 +52,7 @@ let httpServer: Awaited<ReturnType<typeof server.startServer>> | null = null;
 let hooksInstalled = false; // true once installHooks has registered our hooks
 let petAsset: PetAsset | null = null; // resolved sprite descriptor or null (renderer falls back to 🐾)
 let mockTimers: NodeJS.Timeout[] = [];
-let updateUrl: string | null = null; // release page for the latest available update (OPEN_UPDATE target)
+let updateUrl: string | null = null; // latest release page (runUpdater fallback if Terminal launch fails)
 let updateTimer: NodeJS.Timeout | null = null;
 
 /**
@@ -93,10 +100,9 @@ function wireIpc(): void {
   ipcMain.on(C.IPC.DRAG_MOVE, () => win.dragMove(petWindow));
   ipcMain.on(C.IPC.DRAG_END, () => win.endDrag());
 
-  // Update toast "Update" button -> open the release page in the browser.
-  ipcMain.on(C.IPC.OPEN_UPDATE, () => {
-    if (updateUrl) shell.openExternal(updateUrl);
-  });
+  // Update toast "Update" button -> run the install one-liner in Terminal and
+  // relaunch (keeps the quarantine-free path; no browser download).
+  ipcMain.on(C.IPC.RUN_UPDATE, () => runUpdater());
 
   ipcMain.on(C.IPC.SEND_REPLY, (_e, payload) => {
     // Phase 0: no Claude Code to deliver to; just log + keep state coherent.
@@ -311,6 +317,29 @@ function maybeStartUpdateChecks(): void {
   if (/^(1|true|yes)$/i.test(process.env.CLAUDE_PET_NO_UPDATE_CHECK || "")) return;
   void checkForUpdate();
   updateTimer = setInterval(() => void checkForUpdate(), UPDATE_POLL_MS);
+}
+
+/**
+ * One-click update: drop a `.command` that runs the install one-liner, open it
+ * in Terminal (visible progress; no Automation permission needed), then quit so
+ * the installer can replace the running bundle and relaunch the fresh app. The
+ * detached Terminal outlives us. On any failure, fall back to the release page.
+ */
+function runUpdater(): void {
+  try {
+    const script = path.join(os.tmpdir(), "claude-pet-update.command");
+    fs.writeFileSync(
+      script,
+      `#!/bin/bash\nset -e\ncurl -fsSL ${UPDATE_INSTALL_URL} | bash\n`,
+      { mode: 0o755 }
+    );
+    spawn("open", [script], { detached: true, stdio: "ignore" }).unref();
+    // Brief beat so Terminal is up before we exit; the updater then swaps the
+    // bundle with no instance running and relaunches it.
+    setTimeout(() => app.quit(), 800);
+  } catch {
+    if (updateUrl) shell.openExternal(updateUrl); // best-effort fallback
+  }
 }
 
 // ── lifecycle ─────────────────────────────────────────────────────────────

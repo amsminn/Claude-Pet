@@ -140,8 +140,8 @@ export interface ClaudePetBridge {
   onState(cb: (payload: StatePayload) => void): () => void;
   /** Subscribe to "a newer release is available"; returns an unsubscribe fn. */
   onUpdateAvailable(cb: (info: UpdateInfo) => void): () => void;
-  /** Open the release page in the default browser (the toast's Update button). */
-  openUpdate(): void;
+  /** Run the install one-liner in Terminal and relaunch (the toast's Update button). */
+  runUpdate(): void;
   /** Toggle window click-through on #widget enter/leave. */
   setInteractive(interactive: boolean): void;
   /** Promote/demote the panel's key focus while a reply field is open. */

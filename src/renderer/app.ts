@@ -417,7 +417,7 @@ if (bridge && typeof bridge.onState === "function") {
 // ── update toast: surface a newer GitHub release (install = `curl | bash`) ──
 const updateToast = $("updateToast");
 const updateVersion = $("updateVersion");
-$("updateBtn").addEventListener("click", () => bridge?.openUpdate());
+$("updateBtn").addEventListener("click", () => bridge?.runUpdate());
 $("updateLater").addEventListener("click", () => (updateToast.hidden = true));
 if (bridge && typeof bridge.onUpdateAvailable === "function") {
   bridge.onUpdateAvailable((info) => {

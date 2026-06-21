@@ -116,7 +116,7 @@ export const IPC = Object.freeze({
   DRAG_MOVE: "pet:drag-move", // renderer -> main: drag tick (main re-reads global cursor and repositions)
   DRAG_END: "pet:drag-end", // renderer -> main: end drag (pins position, disables auto re-anchor)
   UPDATE_AVAILABLE: "pet:update-available", // main -> renderer  (UpdateInfo): a newer GitHub release exists
-  OPEN_UPDATE: "pet:open-update", // renderer -> main: open the release page in the browser
+  RUN_UPDATE: "pet:run-update", // renderer -> main: run the install one-liner in Terminal + relaunch
 });
 
 // ── wire / protocol tags (docs/05 §3.2, §5) ────────────────────────────────
