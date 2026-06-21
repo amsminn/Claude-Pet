@@ -181,3 +181,23 @@ test("custom host is honored in registered urls", () => {
   assert.match(s.hooks.PermissionRequest[0].hooks[0].url, /^http:\/\/127\.0\.0\.1:8080\/permission$/);
   cleanup();
 });
+
+// ── opt-in reply hook: Stop -> /reply only when reply:true ──
+test("reply:true registers a blocking Stop -> /reply hook; default does not", () => {
+  const { p, cleanup } = tmpSettings();
+  hooks.installHooks({ port: 8080, settingsPath: p, reply: true });
+  const s = readJson(p);
+  const stopUrls = (s.hooks.Stop || []).flatMap((g: any) => (g.hooks || []).map((h: any) => h.url));
+  assert.ok(stopUrls.includes("http://127.0.0.1:8080/reply"), "Stop should POST to /reply");
+  assert.ok(stopUrls.includes("http://127.0.0.1:8080/state"), "Stop keeps its fire-and-forget /state hook");
+  cleanup();
+});
+
+test("without reply, Stop has no /reply hook (default, zero blocking risk)", () => {
+  const { p, cleanup } = tmpSettings();
+  hooks.installHooks({ port: 8080, settingsPath: p });
+  const s = readJson(p);
+  const stopUrls = (s.hooks.Stop || []).flatMap((g: any) => (g.hooks || []).map((h: any) => h.url));
+  assert.ok(!stopUrls.some((u: string) => u.endsWith("/reply")), "no /reply hook by default");
+  cleanup();
+});

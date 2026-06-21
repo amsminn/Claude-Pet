@@ -95,13 +95,27 @@ function buildPreToolUseResponse({
 }
 
 /**
+ * Build a Stop (or SubagentStop) reply: a TOP-LEVEL block decision whose
+ * `reason` is injected back as the agent's continuation. This is the only
+ * official channel for a free-text reply — the held Stop hook returns this to
+ * make Claude Code continue with the user's text (docs/05 §4; Claude Code Stop
+ * hook `{decision:"block", reason}`).
+ */
+function buildStopResponse({ reason }: { reason?: string } = {}): {
+  decision: "block";
+  reason: string;
+} {
+  return { decision: "block", reason: reason || "" };
+}
+
+/**
  * A held permission request awaiting a UI decision.
  */
 interface PendingRequest {
   /** caller-supplied id; auto-generated if absent */
   id?: string;
   sessionId: string;
-  form: "PermissionRequest" | "PreToolUse";
+  form: "PermissionRequest" | "PreToolUse" | "Stop";
   /** settles the held HTTP response with an envelope, or `null` for no-decision */
   settle: (env: object | null) => void;
   /** {tool, cmd} for the card UI */
@@ -183,15 +197,17 @@ function createBridge() {
       const req = take(id);
       if (!req) return null;
       const envelope =
-        req.form === "PreToolUse"
-          ? buildPreToolUseResponse({
-              permissionDecision: d.decision,
-              permissionDecisionReason: d.message,
-            })
-          : buildPermissionResponse({
-              behavior: d.decision,
-              setMode: d.setMode,
-            });
+        req.form === "Stop"
+          ? buildStopResponse({ reason: d.message })
+          : req.form === "PreToolUse"
+            ? buildPreToolUseResponse({
+                permissionDecision: d.decision,
+                permissionDecisionReason: d.message,
+              })
+            : buildPermissionResponse({
+                behavior: d.decision,
+                setMode: d.setMode,
+              });
       if (typeof req.settle === "function") req.settle(envelope);
       return envelope;
     },
@@ -212,4 +228,4 @@ function createBridge() {
   };
 }
 
-export { createBridge, buildPermissionResponse, buildPreToolUseResponse };
+export { createBridge, buildPermissionResponse, buildPreToolUseResponse, buildStopResponse };

@@ -47,6 +47,12 @@ const bridge = permission.createBridge();
 // session even when the wire id (perm request) differs from the session id.
 const permSession = new Map<string, string>();
 
+// "대화 모드" (opt-in, default OFF): when on, the Stop hook is held so a free-text
+// reply can be injected as the agent's continuation. sessionId -> held reply id.
+let replyMode = false;
+const replySession = new Map<string, string>();
+const REPLY_TIMEOUT_MS = 3 * 60 * 1000; // auto-continue (stop) if no reply in 3min
+
 let petWindow: BrowserWindow | null = null;
 let httpServer: Awaited<ReturnType<typeof server.startServer>> | null = null;
 let hooksInstalled = false; // true once installHooks has registered our hooks
@@ -104,21 +110,32 @@ function wireIpc(): void {
   // relaunch (keeps the quarantine-free path; no browser download).
   ipcMain.on(C.IPC.RUN_UPDATE, () => runUpdater());
 
-  // Right-click the pet -> native menu (펫 닫기 = quit the app).
+  // Right-click the pet -> native menu (대화 모드 toggle · 펫 닫기).
   ipcMain.on(C.IPC.SHOW_PET_MENU, () => {
     const menu = Menu.buildFromTemplate([
+      { label: "대화 모드 (답장 주입)", type: "checkbox", checked: replyMode, click: () => toggleReplyMode() },
+      { type: "separator" },
       { label: "펫 닫기", click: () => app.quit() },
     ]);
     menu.popup({ window: petWindow ?? undefined });
   });
 
-  ipcMain.on(C.IPC.SEND_REPLY, (_e, payload) => {
-    // Phase 0: no Claude Code to deliver to; just log + keep state coherent.
-    if (payload && payload.sessionId) {
-      const s = store.sessions.get(payload.sessionId);
-      if (s) s.updatedAt = ++store.seq;
-      pushState();
+  ipcMain.on(C.IPC.SEND_REPLY, (_e, payload = {}) => {
+    const sessionId = payload && payload.sessionId;
+    if (!sessionId) return;
+    // 대화 모드: if a Stop reply is held for this session, settle it — a non-empty
+    // message becomes the agent's continuation (decision:block / reason); an empty
+    // message (Esc / dismiss) settles no-decision so the agent stops normally.
+    const replyId = replySession.get(sessionId);
+    if (replyId) {
+      replySession.delete(sessionId);
+      const msg = String(payload.message ?? "").trim();
+      if (msg) bridge.resolve(replyId, { message: msg });
+      else bridge.cancel(replyId);
     }
+    const s = store.sessions.get(sessionId);
+    if (s) s.updatedAt = ++store.seq;
+    pushState();
   });
 
   ipcMain.on(C.IPC.RESOLVE_PERMISSION, (_e, { id, decision, message } = {}) => {
@@ -184,7 +201,40 @@ async function startLocalServer(): Promise<void> {
       state.applyEvent(store, perm);
       pushState();
     },
+    onReply: (payload: WirePayload, settle: (envelope: object | null) => void) => {
+      const p = payload && typeof payload === "object" ? payload : {};
+      const sessionId = p.sessionId || p.session_id || p.s || "unknown";
+      // Safety net: if 대화 모드 is off (or a race), never hold — let it stop.
+      if (!replyMode) {
+        settle(null);
+        return;
+      }
+      // The /state Stop hook already set the card to attention; hold the reply
+      // channel so a card reply can be injected (or auto-continue on timeout).
+      const id = bridge.hold({ sessionId, form: "Stop", settle, timeoutMs: REPLY_TIMEOUT_MS });
+      replySession.set(sessionId, id);
+      pushState();
+    },
   });
+}
+
+/**
+ * Toggle 대화 모드: (de)register the blocking Stop -> /reply hook, and drain any
+ * held replies when turning off so a session never hangs after opt-out. Never throws.
+ */
+function toggleReplyMode(): void {
+  replyMode = !replyMode;
+  if (!replyMode) {
+    for (const [sessionId, id] of replySession) bridge.cancel(id);
+    replySession.clear();
+  }
+  if (!HOOKS_DISABLED && httpServer) {
+    try {
+      hooksInstall.installHooks({ port: httpServer.port, host: httpServer.host, reply: replyMode });
+    } catch {
+      /* a broken settings.json must not crash the toggle */
+    }
+  }
 }
 
 /**
@@ -266,7 +316,7 @@ function replayContinuation(sessionId: string, decision: PermissionDecision): vo
 function setupHooks(): void {
   if (HOOKS_DISABLED || !httpServer) return;
   try {
-    hooksInstall.installHooks({ port: httpServer.port, host: httpServer.host });
+    hooksInstall.installHooks({ port: httpServer.port, host: httpServer.host, reply: replyMode });
     hooksInstalled = true;
   } catch {
     hooksInstalled = false; // a broken settings.json must not block startup

@@ -186,6 +186,9 @@ function buildCard(id: string): CardEl {
   const cancelReply = (): void => {
     local(id).replying = false;
     bridge?.setReplyFocus(false);
+    // Dismiss a held Stop reply so the agent stops normally (no-op on a card
+    // with nothing held). An empty message is treated as "dismiss" by main.
+    bridge?.sendReply({ sessionId: id, message: "" });
     render();
   };
   replyInput.addEventListener("keydown", (e) => {

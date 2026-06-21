@@ -166,3 +166,26 @@ test("bridge.resolve before timeout wins and cancels the pending timer", async (
   await new Promise((r) => setTimeout(r, 50));
   assert.equal(settled.hookSpecificOutput.decision.behavior, "deny");
 });
+
+// ── Stop reply form: inject a free-text reply as decision:block / reason ──
+test("buildStopResponse: top-level block decision with the reply as reason", () => {
+  const out = permission.buildStopResponse({ reason: "also add tests" });
+  assert.deepEqual(out, { decision: "block", reason: "also add tests" });
+});
+
+test("bridge resolves a Stop-form request into a block+reason envelope", () => {
+  const bridge = permission.createBridge();
+  let settled: any = "untouched";
+  const id = bridge.hold({ sessionId: "A", form: "Stop", settle: (e) => (settled = e) });
+  const env = bridge.resolve(id, { message: "keep going" });
+  assert.deepEqual(env, { decision: "block", reason: "keep going" });
+  assert.deepEqual(settled, { decision: "block", reason: "keep going" });
+});
+
+test("dismissing a held Stop reply settles null (agent stops normally)", () => {
+  const bridge = permission.createBridge();
+  let settled: any = "untouched";
+  const id = bridge.hold({ sessionId: "A", form: "Stop", settle: (e) => (settled = e) });
+  assert.equal(bridge.cancel(id), true);
+  assert.equal(settled, null);
+});

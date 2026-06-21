@@ -47,7 +47,7 @@ const STATE_EVENTS = [
  * @param opts.settingsPath  defaults to ~/.claude/settings.json
  */
 function installHooks(
-  opts: { port?: number; host?: string; settingsPath?: string } = {}
+  opts: { port?: number; host?: string; settingsPath?: string; reply?: boolean } = {}
 ): { settingsPath: string; changed: boolean; settings: any } {
   const settingsPath = opts.settingsPath || DEFAULT_SETTINGS_PATH;
   const host = opts.host || "127.0.0.1";
@@ -55,6 +55,7 @@ function installHooks(
   const base = `http://${host}:${port}`;
   const stateUrl = `${base}/state`;
   const permissionUrl = `${base}/permission`;
+  const replyUrl = `${base}/reply`;
 
   const settings = readSettings(settingsPath);
   const before = stableStringify(settings);
@@ -84,6 +85,18 @@ function installHooks(
     _owner: MARK,
     hooks: [{ type: "http", url: permissionUrl }],
   });
+
+  // Opt-in "대화 모드": a BLOCKING Stop hook so a free-text reply can be returned
+  // as the agent's continuation. Off by default — Stop then only has its
+  // fire-and-forget /state hook (zero blocking risk). No timeout here; the
+  // server/bridge bounds the hold.
+  if (opts.reply) {
+    appendGroup(settings.hooks, "Stop", {
+      matcher: "*",
+      _owner: MARK,
+      hooks: [{ type: "http", url: replyUrl }],
+    });
+  }
 
   // Drop an empty hooks object so we don't gratuitously add a key.
   if (Object.keys(settings.hooks).length === 0) delete settings.hooks;

@@ -40,6 +40,7 @@ function startServer(
     host?: string;
     onEvent?: (payload: WirePayload) => void;
     onPermission?: (payload: WirePayload, settle: (env: object | null) => void) => void;
+    onReply?: (payload: WirePayload, settle: (env: object | null) => void) => void;
   } = {}
 ): Promise<{
   port: number;
@@ -51,11 +52,56 @@ function startServer(
   const onEvent = typeof opts.onEvent === "function" ? opts.onEvent : () => {};
   const onPermission =
     typeof opts.onPermission === "function" ? opts.onPermission : null;
+  const onReply = typeof opts.onReply === "function" ? opts.onReply : null;
 
-  // Held permission requests keyed by id, so POST /permission/:id/resolve can
+  // Held blocking requests keyed by id, so POST /permission/:id/resolve can
   // settle the still-open hook request from the UI side (docs/05 §5).
   const held = new Map<string, { settle: (env: object | null) => void; payload: WirePayload }>(); // id -> { settle(envelope|null), payload }
   let seq = 0;
+
+  // Shared blocking transport for /permission and /reply: hold the HTTP response
+  // until `handler` settles it with an envelope (200 JSON = decision/reply) or
+  // null (204 = no-decision / let the agent continue). Idempotent settle.
+  function handleBlocking(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    handler: ((payload: WirePayload, settle: (env: object | null) => void) => void) | null
+  ): Promise<void> {
+    return readBody(req)
+      .then((body) => {
+        let payload: WirePayload;
+        try {
+          payload = JSON.parse(body);
+        } catch {
+          return sendJson(res, 204, null);
+        }
+        if (!handler) return sendJson(res, 204, null);
+        const id = pickId(payload, ++seq);
+        let settled = false;
+        const settle = (envelope: object | null) => {
+          if (settled) return;
+          settled = true;
+          held.delete(id);
+          if (envelope) sendJson(res, 200, envelope);
+          else sendJson(res, 204, null);
+        };
+        res.on("close", () => {
+          if (!settled) {
+            settled = true;
+            held.delete(id);
+          }
+        });
+        held.set(id, { settle, payload });
+        try {
+          handler(payload, settle);
+        } catch {
+          settle(null);
+        }
+      })
+      .catch(() => {
+        sendJson(res, 204, null);
+      });
+  }
 
   const server = http.createServer((req, res) => {
     const url = req.url || "/";
@@ -88,49 +134,15 @@ function startServer(
       return;
     }
 
+    // Interactive permission decision (allow/deny) — held until the UI resolves.
     if (method === "POST" && url === "/permission") {
-      return readBody(req)
-        .then((body) => {
-          let payload: WirePayload;
-          try {
-            payload = JSON.parse(body);
-          } catch {
-            return sendJson(res, 204, null); // malformed -> no-decision
-          }
-          if (!onPermission) {
-            // No UI bridge wired -> no-decision fallback (native prompt).
-            return sendJson(res, 204, null);
-          }
+      return handleBlocking(req, res, onPermission);
+    }
 
-          const id = pickId(payload, ++seq);
-          let settled = false;
-          const settle = (envelope: object | null) => {
-            if (settled) return;
-            settled = true;
-            held.delete(id);
-            if (envelope) sendJson(res, 200, envelope);
-            else sendJson(res, 204, null); // no-decision -> native fallback
-          };
-          // If Claude Code (or the test client) hangs up before we settle,
-          // forget the held request so it cannot leak.
-          res.on("close", () => {
-            if (!settled) {
-              settled = true;
-              held.delete(id);
-            }
-          });
-
-          held.set(id, { settle, payload });
-          try {
-            onPermission(payload, settle);
-          } catch {
-            // a throwing bridge must not block the agent
-            settle(null);
-          }
-        })
-        .catch(() => {
-          sendJson(res, 204, null);
-        });
+    // Free-text reply on Stop — held (only when "대화 모드" is on; otherwise the
+    // glue settles null immediately so the agent stops normally).
+    if (method === "POST" && url === "/reply") {
+      return handleBlocking(req, res, onReply);
     }
 
     const resolveMatch = url.match(/^\/permission\/([^/]+)\/resolve$/);
