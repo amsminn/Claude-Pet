@@ -103,6 +103,7 @@ Claude-Pet is a small Electron app with a strict main / preload / renderer split
 ## Documentation
 
 The [`docs/`](docs/README.md) tree is the technical spec (docs-as-code). Start at [`docs/README.md`](docs/README.md).
+Release history is in [`CHANGELOG.md`](CHANGELOG.md).
 
 - [Vision](docs/00-overview/vision.md) — what we're building and why
 - [Architecture overview](docs/01-architecture/overview.md) — components and data flow
