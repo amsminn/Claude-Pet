@@ -73,6 +73,10 @@ body {
   z-index: 5;
 }
 .widget.is-collapsed .cards { max-height: 0; opacity: 0; pointer-events: none; transform: translateY(8px); }
+/* Collapsed: shrink the widget to the pet's width so the hover/expand hitbox is
+   the pet — not the full card-width box (the empty left area where cards would
+   appear used to trigger the expand). Anchored right, so the pet doesn't move. */
+.widget.is-collapsed { width: calc(var(--pet-frame-w) * var(--pet-scale)); overflow: visible; }
 
 /* 카드 스택 */
 .cards {
