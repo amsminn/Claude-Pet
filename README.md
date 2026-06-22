@@ -16,12 +16,12 @@
 <br>
 
 <div align="center">
-  <img src="docs/media/demo.gif" alt="Claude-Pet demo — a floating pet mirrors a Claude Code session as a card stack (thinking → working → done)" width="760">
+  <img src="docs/media/stack.png" alt="Claude-Pet — a floating pet (nezuko, loaded from ~/.codex/pets) mirrors Claude Code sessions as a card stack" width="760">
 </div>
 
 <br>
 
-Claude-Pet is a floating desktop companion that turns Claude Code's live activity into a glanceable card stack — thinking, running a tool, waiting on a permission, done — and lets you reply to the agent right from the card. It recreates the OpenAI Codex desktop-pet experience for Claude Code (CLI), and is **asset-compatible** with the Codex pet ecosystem (`~/.codex/pets/`).
+Claude-Pet is a floating desktop companion that turns Claude Code's live activity into a glanceable card stack — thinking, running a tool, waiting on a permission, done — and lets you approve or deny a tool permission right from the card. It recreates the OpenAI Codex desktop-pet experience for Claude Code (CLI), and is **asset-compatible** with the Codex pet ecosystem (`~/.codex/pets/`).
 
 > [!TIP]
 > Pet sprites load natively from `~/.codex/pets/`. Drop in any Codex-compatible pet and Claude-Pet animates it; with no pet installed it falls back to a 🐾.
@@ -71,19 +71,19 @@ Claude-Pet is a small Electron app with a strict main / preload / renderer split
 - **State engine** — a pure, electron-free reducer that turns hook events into per-session cards and one summarizing `PetState`. Fully unit-tested with `node --test`.
 - **Asset loader** — discovers and validates Codex-compatible pets (paths + geometry only); pixel decoding and frame auto-detection happen in the renderer canvas.
 - **Pet window** — a non-activating, always-on-top, click-through panel that floats over fullscreen apps, shows on all Spaces, and drags across monitors (tracking the global cursor so it survives mixed HiDPI scales).
-- **Card stack** — the renderer paints one card per session (title, body, status icon) and sends inline replies / permission decisions back to main over IPC.
+- **Card stack** — the renderer paints one card per session (title, body, status icon) and sends permission decisions back to main over IPC.
 
 ## Preview
 
 <table>
 <tr>
 <td width="50%" valign="top">
-  <img src="docs/media/stack.png" alt="Multi-session card stack with a +N overflow badge">
-  <br><sub>One pet summarizes many sessions — cards stack newest-last, and the oldest collapse into a <code>+N</code> overflow.</sub>
+  <img src="docs/media/stack.png" alt="Multi-session card stack">
+  <br><sub>One pet summarizes many sessions — cards stack newest-last; scroll up for older ones. A response completion auto-expands the stack.</sub>
 </td>
 <td width="50%" valign="top">
   <img src="docs/media/permission.png" alt="An inline tool-permission request shown on a card">
-  <br><sub>Approve a tool permission (or reply to the agent) straight from the card — no context switch.</sub>
+  <br><sub>Approve or deny a tool permission straight from the card — no context switch.</sub>
 </td>
 </tr>
 </table>
@@ -93,7 +93,7 @@ Claude-Pet is a small Electron app with a strict main / preload / renderer split
 ## Why Claude-Pet?
 
 - **Glanceable status** — A single pet summarizes every session: thinking, working, waiting for a permission, errored, or done — without stealing focus from your editor.
-- **Reply inline** — Answer a permission prompt or send a follow-up message straight from the card; the panel briefly becomes key so you can type, then drops back to unobtrusive.
+- **Approve from the card** — Answer a tool-permission prompt (allow / deny) straight from the card; the panel briefly becomes key, then drops back to unobtrusive.
 - **Codex asset-compatible** — Reuses the `~/.codex/pets/` sprite format natively, so existing Codex pets just work.
 - **Multi-monitor aware** — Drag the pet anywhere across displays; it re-anchors or clamps itself on display changes so it never gets lost.
 - **Clean-room, typed core** — TypeScript end to end; the state engine, asset loader, permission bridge, and server are electron-free and independently unit-tested.
