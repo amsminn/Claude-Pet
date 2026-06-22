@@ -59,10 +59,8 @@ const ICON_SVG: Record<string, string> = {
 
 // ── keyed render + FLIP reorder ──
 const els = new Map<string, CardEl>();
-const lastCardState = new Map<string, string>(); // sessionId -> prev state, to detect completion
-let pinnedUntil = 0; // auto-open window (ms timestamp) opened on a response completion
-let autoOpenTimer = 0; // timer to re-collapse after the auto-open window
-const AUTO_OPEN_MS = 4500;
+const lastCardState = new Map<string, string>(); // sessionId -> prev state, to detect transitions
+let stayOpen = false; // a completion keeps the stack open until work resumes / manual collapse
 function render(): void {
   const all = cards.slice(-12);
   const list = all; // render ALL (the stack scrolls); no hard cap / +N badge
@@ -70,22 +68,22 @@ function render(): void {
   petCount.textContent = String(all.length);
   petCount.hidden = all.length === 0;
 
-  // Only a RESPONSE COMPLETION (a session entering `attention`) auto-opens the
-  // stack + scrolls — work-time updates (thinking/working/tool use) leave the
-  // collapse state and scroll position alone, so the pet stays calm while busy.
+  // A RESPONSE COMPLETION (a session entering `attention`) opens the stack and
+  // keeps it open; resumed work (a session entering a working state) dismisses it.
+  // Plain work-time updates leave the collapse state + scroll position alone.
   let justCompleted = false;
+  let workResumed = false;
   for (const s of all) {
-    if (s.state === "attention" && lastCardState.get(s.sessionId) !== "attention") justCompleted = true;
+    const prev = lastCardState.get(s.sessionId);
+    if (s.state === "attention" && prev !== "attention") justCompleted = true;
+    if (WORKING.has(s.state) && !WORKING.has(prev ?? "")) workResumed = true;
     lastCardState.set(s.sessionId, s.state);
   }
-  if (justCompleted) {
-    pinnedUntil = Date.now() + AUTO_OPEN_MS;
-    if (autoOpenTimer) clearTimeout(autoOpenTimer);
-    autoOpenTimer = window.setTimeout(() => { autoOpenTimer = 0; render(); }, AUTO_OPEN_MS + 60);
-  }
+  if (workResumed) stayOpen = false; // new work → drop the last result
+  if (justCompleted) stayOpen = true; // completion → keep showing it
 
-  // Keep open while a permission is pending / replying / click-pinned / inside the
-  // post-completion window; otherwise collapse to rest when the cursor isn't on it.
+  // Keep open while a permission is pending / replying / click-pinned / a result
+  // is being shown (stayOpen); otherwise collapse to rest when the cursor's off it.
   if (pinnedOpen()) widget.classList.remove("is-collapsed");
   else if (!widgetHovered) widget.classList.add("is-collapsed");
   const done = all.filter((s) => s.state === "attention");
@@ -347,6 +345,8 @@ function endPetDrag(e: PointerEvent): void {
     if (pinnedByClick) {
       bridge?.setInteractive(true);
       widget.classList.remove("is-collapsed");
+    } else {
+      stayOpen = false; // tapping to close also dismisses a shown completion result
     }
     render();
     return;
@@ -418,7 +418,7 @@ function isReplying(): boolean {
   return [...cardLocal.values()].some((l) => l && l.replying);
 }
 function pinnedOpen(): boolean {
-  return hasPending() || isReplying() || pinnedByClick || Date.now() < pinnedUntil;
+  return hasPending() || isReplying() || pinnedByClick || stayOpen;
 }
 widget.classList.add("is-collapsed"); // default rest state
 widget.addEventListener("mouseenter", () => {
@@ -438,6 +438,10 @@ const collapseBtn = $("collapse");
 collapseBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
 collapseBtn.onclick = (e) => {
   e.stopPropagation();
+  if (!widget.classList.contains("is-collapsed")) {
+    stayOpen = false; // collapsing dismisses a shown completion result
+    pinnedByClick = false;
+  }
   widget.classList.toggle("is-collapsed");
 };
 
