@@ -6,9 +6,10 @@
  *   - BrowserWindow({ type:'panel', transparent, frame:false, hasShadow:false,
  *     resizable:false, alwaysOnTop:true, skipTaskbar:true, ... })
  *     `type:'panel'` => NSWindowStyleMaskNonactivatingPanel: does not steal
- *     app focus, floats over fullscreen apps, shows on all Spaces.
- *   - setAlwaysOnTop(true,'screen-saver'); setVisibleOnAllWorkspaces(true,
- *     {visibleOnFullScreen:true}).
+ *     app focus, shows on all regular Spaces.
+ *   - setAlwaysOnTop(true,'floating'); setVisibleOnAllWorkspaces(true,
+ *     {visibleOnFullScreen:false}) — floats over normal windows but NOT over
+ *     fullscreen apps (stays off fullscreen Spaces).
  *   - anchor bottom-right of the PRIMARY display workArea.
  *   - click-through: default setIgnoreMouseEvents(true,{forward:true}); the
  *     renderer toggles it via IPC.SET_INTERACTIVE on #widget enter/leave.
@@ -67,9 +68,11 @@ export function createPetWindow(opts: CreatePetWindowOptions = {}): BrowserWindo
     },
   });
 
-  // Float above fullscreen apps, visible on every Space.
-  win.setAlwaysOnTop(true, "screen-saver");
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Float above normal windows on every regular Space, but NOT over fullscreen
+  // apps — visibleOnFullScreen:false keeps the pet off fullscreen Spaces, so it
+  // doesn't sit on top of a video/presentation/fullscreen window.
+  win.setAlwaysOnTop(true, "floating");
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
 
   // Default click-through; renderer toggles per hover via IPC. `forward:true`
   // keeps mouse-move events flowing so the renderer can detect the pet hit area.
