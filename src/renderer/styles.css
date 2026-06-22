@@ -144,7 +144,14 @@ body {
 .card.is-expanded .card__body { -webkit-line-clamp: unset; }
 
 /* 상태 아이콘 (우상단) */
-.icon { width: 20px; height: 20px; flex: none; margin-top: 1px; }
+/* The slot reserves the 20x20 icon box even when the icon is "none", so the
+   title row's height can't change when hover swaps the icon for the same-sized
+   expand chevron (.slot-chev). Without this an icon-less card grew ~3.5px taller
+   on hover (most visible with longer English titles/bodies that wrap to 2 lines,
+   making the body truncatable → the chevron appears). The 1px optical nudge now
+   lives on the slot so the centered icon and the chevron land identically. */
+.slot { width: 20px; height: 20px; flex: none; margin-top: 1px; display: grid; place-items: center; }
+.icon { width: 20px; height: 20px; flex: none; }
 .icon--spinner {
   border-radius: 50%;
   border: 2px solid var(--spinner-track);
