@@ -91,8 +91,9 @@ body {
   max-height: 290px;
   overflow-y: auto;
   /* shadow room on the left/top; right is flush (0) so the card right edge lines
-     up with the pet/collapse button; small bottom so cards sit close to the pet */
-  padding: 20px 0 10px 24px;
+     up with the pet/collapse button; bottom gives a little clearance above the
+     collapse button so the lowest card isn't crowding it */
+  padding: 20px 0 18px 24px;
   scrollbar-width: none;
   transition: opacity .2s ease, transform .28s ease;
 }
@@ -226,7 +227,7 @@ body {
   display: flex; align-items: center; justify-content: center;
   transition: transform .2s, background .15s;
 }
-.collapse svg { width: 15px; height: 15px; display: block; transform: translateY(-1px); } /* optical-center the down-chevron */
+.collapse svg { width: 15px; height: 15px; display: block; } /* geometric center (the -1px optical nudge read too high) */
 .collapse:hover { background: rgba(56,60,74,.7); }
 .widget.is-collapsed .collapse svg { transform: rotate(180deg); }
 /* 접힘(rest) 상태 = 펫 + 카운트 배지만. ⌄ 버튼 숨김(Codex 동작, image #20) */
