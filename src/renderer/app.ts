@@ -59,17 +59,33 @@ const ICON_SVG: Record<string, string> = {
 
 // ── keyed render + FLIP reorder ──
 const els = new Map<string, CardEl>();
+const lastCardState = new Map<string, string>(); // sessionId -> prev state, to detect completion
+let pinnedUntil = 0; // auto-open window (ms timestamp) opened on a response completion
+let autoOpenTimer = 0; // timer to re-collapse after the auto-open window
+const AUTO_OPEN_MS = 4500;
 function render(): void {
   const all = cards.slice(-12);
-  const visibleLimit = 3;
-  const overflowCount = Math.max(0, all.length - visibleLimit);
-  const list = all.slice(-visibleLimit);
+  const list = all; // render ALL (the stack scrolls); no hard cap / +N badge
   // rest-state pet count badge = number of cards in the stack
   petCount.textContent = String(all.length);
   petCount.hidden = all.length === 0;
-  // Keep the stack open while a permission is pending / a reply is being typed
-  // (auto-expand). Otherwise, if the cursor isn't hovering, collapse it — so a
-  // resolved permission re-collapses to rest without needing a hover (no stuck-open).
+
+  // Only a RESPONSE COMPLETION (a session entering `attention`) auto-opens the
+  // stack + scrolls — work-time updates (thinking/working/tool use) leave the
+  // collapse state and scroll position alone, so the pet stays calm while busy.
+  let justCompleted = false;
+  for (const s of all) {
+    if (s.state === "attention" && lastCardState.get(s.sessionId) !== "attention") justCompleted = true;
+    lastCardState.set(s.sessionId, s.state);
+  }
+  if (justCompleted) {
+    pinnedUntil = Date.now() + AUTO_OPEN_MS;
+    if (autoOpenTimer) clearTimeout(autoOpenTimer);
+    autoOpenTimer = window.setTimeout(() => { autoOpenTimer = 0; render(); }, AUTO_OPEN_MS + 60);
+  }
+
+  // Keep open while a permission is pending / replying / click-pinned / inside the
+  // post-completion window; otherwise collapse to rest when the cursor isn't on it.
   if (pinnedOpen()) widget.classList.remove("is-collapsed");
   else if (!widgetHovered) widget.classList.add("is-collapsed");
   const done = all.filter((s) => s.state === "attention");
@@ -90,6 +106,7 @@ function render(): void {
     }
   });
 
+  let newCard = false;
   list.forEach((s, i) => {
     let el = els.get(s.sessionId);
     if (!el) {
@@ -98,10 +115,10 @@ function render(): void {
       el.classList.add("is-new");
       el.addEventListener("animationend", () => el!.classList.remove("is-new"), { once: true });
       cardsEl.appendChild(el);
+      newCard = true;
     }
     el.style.order = String(i);
-    const plusN = overflowCount && i === list.length - 1 ? overflowCount : 0;
-    paintCard(el, s, { latest: s.sessionId === latestId, plusN });
+    paintCard(el, s, { latest: s.sessionId === latestId });
   });
 
   requestAnimationFrame(() => {
@@ -118,7 +135,9 @@ function render(): void {
         });
       }
     });
-    cardsEl.scrollTop = cardsEl.scrollHeight;
+    // Jump to the newest only when a card arrived or a response completed —
+    // otherwise keep the user's scroll position so they can read older cards.
+    if (justCompleted || newCard) cardsEl.scrollTop = cardsEl.scrollHeight;
     updateFades();
   });
 }
@@ -396,7 +415,7 @@ function isReplying(): boolean {
   return [...cardLocal.values()].some((l) => l && l.replying);
 }
 function pinnedOpen(): boolean {
-  return hasPending() || isReplying() || pinnedByClick;
+  return hasPending() || isReplying() || pinnedByClick || Date.now() < pinnedUntil;
 }
 widget.classList.add("is-collapsed"); // default rest state
 widget.addEventListener("mouseenter", () => {

@@ -68,9 +68,9 @@ body {
 .widget {
   position: absolute;
   right: var(--pet-margin-r); bottom: var(--pet-margin-b);
-  /* +48 (not +16) so .cards can carry enough padding for the card shadow to
-     render inside the scroll viewport instead of being clipped at its edge. */
-  width: calc(var(--card-w) + 48px);
+  /* extra width for the card shadow's padding (mostly on the left); the right
+     edge sits ~flush with the pet/collapse button. */
+  width: calc(var(--card-w) + 28px);
   display: flex; flex-direction: column; align-items: flex-end;
   z-index: 5;
 }
@@ -88,9 +88,9 @@ body {
   margin-bottom: 2px;
   max-height: 290px;
   overflow-y: auto;
-  /* room for the card box-shadow (0 6px 22px) + overflowing close/펼치기 chips,
-     so overflow-y:auto doesn't clip the shadow at the container edge */
-  padding: 20px 24px 30px;
+  /* shadow room: generous left/top/bottom (where the shadow shows), tight right
+     so the card's right edge sits ~flush with the pet/collapse button */
+  padding: 20px 4px 30px 24px;
   scrollbar-width: none;
   transition: opacity .2s ease, transform .28s ease;
 }
