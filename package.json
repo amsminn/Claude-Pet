@@ -1,6 +1,6 @@
 {
   "name": "claude-pet",
-  "version": "0.3.12",
+  "version": "0.3.13",
   "private": true,
   "description": "Floating desktop pet that mirrors Claude Code activity as a card stack and lets you reply inline.",
   "main": "./out/main/index.js",
@@ -36,6 +36,7 @@
     },
     "mac": {
       "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
       "identity": null,
       "artifactName": "${productName}-${version}-${arch}.zip",
       "target": [
