@@ -118,6 +118,9 @@ function render(): void {
       newCard = true;
     }
     el.style.order = String(i);
+    // First (oldest/top) card absorbs free space above → short stacks sit at the
+    // bottom near the pet, while overflow still scrolls (unlike justify-content).
+    el.style.marginTop = i === 0 ? "auto" : "";
     paintCard(el, s, { latest: s.sessionId === latestId });
   });
 

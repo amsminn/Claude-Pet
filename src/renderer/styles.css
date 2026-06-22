@@ -68,9 +68,9 @@ body {
 .widget {
   position: absolute;
   right: var(--pet-margin-r); bottom: var(--pet-margin-b);
-  /* extra width for the card shadow's padding (mostly on the left); the right
-     edge sits ~flush with the pet/collapse button. */
-  width: calc(var(--card-w) + 28px);
+  /* the extra width is the card shadow's LEFT padding; the card's right edge is
+     flush with the pet / collapse button (right padding 0). */
+  width: calc(var(--card-w) + 24px);
   display: flex; flex-direction: column; align-items: flex-end;
   z-index: 5;
 }
@@ -84,13 +84,15 @@ body {
 .cards {
   width: 100%;
   display: flex; flex-direction: column; gap: var(--card-gap);
-  justify-content: flex-end; /* anchor cards to the bottom (just above the pet) */
-  margin-bottom: 2px;
+  /* NO justify-content: flex-end — it breaks scrolling (top items become
+     unreachable in Chromium). The first card gets margin-top:auto in JS instead,
+     which bottom-anchors a short stack AND keeps scrolling working. */
+  margin-bottom: 0;
   max-height: 290px;
   overflow-y: auto;
-  /* shadow room: generous left/top/bottom (where the shadow shows), tight right
-     so the card's right edge sits ~flush with the pet/collapse button */
-  padding: 20px 4px 30px 24px;
+  /* shadow room on the left/top; right is flush (0) so the card right edge lines
+     up with the pet/collapse button; small bottom so cards sit close to the pet */
+  padding: 20px 0 10px 24px;
   scrollbar-width: none;
   transition: opacity .2s ease, transform .28s ease;
 }
@@ -215,8 +217,9 @@ body {
 
 /* 전역 접기 chevron */
 .collapse {
-  /* pet's top-right — the SAME slot as .pet__count (mutually exclusive by state) */
-  position: absolute; top: -6px; right: -4px; z-index: 4;
+  /* pet's top-right — the SAME slot as .pet__count (mutually exclusive by state),
+     right edge flush with the cards */
+  position: absolute; top: -6px; right: 0; z-index: 4;
   width: 24px; height: 24px; border-radius: 50%;
   background: rgba(40,42,52,.55); backdrop-filter: blur(6px);
   border: 1px solid rgba(255,255,255,.08); color: #d7dbe4; cursor: pointer;
@@ -236,7 +239,7 @@ body {
 .pet__count {
   /* same top-right slot + size as .collapse, so collapsed badge ↔ expanded
      chevron sit in the exact same place */
-  position: absolute; top: -6px; right: -4px; z-index: 3;
+  position: absolute; top: -6px; right: 0; z-index: 3;
   min-width: 24px; height: 24px; padding: 0 6px; box-sizing: border-box;
   border-radius: 999px; background: var(--check-green); color: #fff;
   font-size: 13px; font-weight: 700; line-height: 1;
