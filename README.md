@@ -16,7 +16,7 @@
 <br>
 
 <div align="center">
-  <img src="docs/media/stack.png" alt="Claude-Pet — a floating pet (nezuko, loaded from ~/.codex/pets) mirrors Claude Code sessions as a card stack" width="760">
+  <img src="docs/media/demo.gif" alt="Claude-Pet — a floating pet (nezuko, loaded from ~/.codex/pets) mirrors Claude Code sessions as a card stack" width="360">
 </div>
 
 <br>
@@ -78,8 +78,8 @@ Claude-Pet is a small Electron app with a strict main / preload / renderer split
 <table>
 <tr>
 <td width="50%" valign="top">
-  <img src="docs/media/stack.png" alt="Multi-session card stack">
-  <br><sub>One pet summarizes many sessions — cards stack newest-last; scroll up for older ones. A response completion auto-expands the stack.</sub>
+  <img src="docs/media/collapsed.png" alt="The pet resting, collapsed to just the sprite + a count badge">
+  <br><sub>At rest it collapses to just the pet + a count badge. A response completion auto-expands the stack; scroll up for older cards.</sub>
 </td>
 <td width="50%" valign="top">
   <img src="docs/media/permission.png" alt="An inline tool-permission request shown on a card">
