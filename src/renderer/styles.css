@@ -216,13 +216,14 @@ body {
 /* 전역 접기 chevron */
 .collapse {
   /* pet's top-right — the SAME slot as .pet__count (mutually exclusive by state) */
-  position: absolute; top: 2px; right: -2px; z-index: 4;
-  width: 26px; height: 26px; border-radius: 50%;
+  position: absolute; top: -6px; right: -4px; z-index: 4;
+  width: 24px; height: 24px; border-radius: 50%;
   background: rgba(40,42,52,.55); backdrop-filter: blur(6px);
   border: 1px solid rgba(255,255,255,.08); color: #d7dbe4; cursor: pointer;
-  display: grid; place-items: center; transition: transform .2s, background .15s;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .2s, background .15s;
 }
-.collapse svg { width: 16px; height: 16px; display: block; } /* block: no inline-svg baseline offset */
+.collapse svg { width: 15px; height: 15px; display: block; transform: translateY(-1px); } /* optical-center the down-chevron */
 .collapse:hover { background: rgba(56,60,74,.7); }
 .widget.is-collapsed .collapse svg { transform: rotate(180deg); }
 /* 접힘(rest) 상태 = 펫 + 카운트 배지만. ⌄ 버튼 숨김(Codex 동작, image #20) */
@@ -233,8 +234,10 @@ body {
 .pet:active { cursor: grabbing; }
 /* 펫 카운트 배지(접힘 상태에서 펫 우상단, 스택 카드 수) — Codex collapsed 표시 */
 .pet__count {
-  position: absolute; top: 2px; right: -2px; z-index: 3;
-  min-width: 23px; height: 23px; padding: 0 6px; box-sizing: border-box;
+  /* same top-right slot + size as .collapse, so collapsed badge ↔ expanded
+     chevron sit in the exact same place */
+  position: absolute; top: -6px; right: -4px; z-index: 3;
+  min-width: 24px; height: 24px; padding: 0 6px; box-sizing: border-box;
   border-radius: 999px; background: var(--check-green); color: #fff;
   font-size: 13px; font-weight: 700; line-height: 1;
   display: grid; place-items: center;
