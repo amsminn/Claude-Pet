@@ -68,7 +68,9 @@ body {
 .widget {
   position: absolute;
   right: var(--pet-margin-r); bottom: var(--pet-margin-b);
-  width: calc(var(--card-w) + 16px);
+  /* +48 (not +16) so .cards can carry enough padding for the card shadow to
+     render inside the scroll viewport instead of being clipped at its edge. */
+  width: calc(var(--card-w) + 48px);
   display: flex; flex-direction: column; align-items: flex-end;
   z-index: 5;
 }
@@ -83,9 +85,11 @@ body {
   width: 100%;
   display: flex; flex-direction: column; gap: var(--card-gap);
   margin-bottom: 2px;
-  max-height: 270px;
+  max-height: 290px;
   overflow-y: auto;
-  padding: 16px 8px 12px;
+  /* room for the card box-shadow (0 6px 22px) + overflowing close/펼치기 chips,
+     so overflow-y:auto doesn't clip the shadow at the container edge */
+  padding: 20px 24px 30px;
   scrollbar-width: none;
   transition: opacity .2s ease, transform .28s ease;
 }
