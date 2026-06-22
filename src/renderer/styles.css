@@ -51,7 +51,10 @@
   --pet-frame-w: 192px;
   --pet-frame-h: 208px;
   --pet-scale: 0.66;          /* 192*0.66 ≈ 127px CSS */
-  --pet-margin-r: 14px;
+  /* pet/cards inset from the window's right edge. Needs ≥ the card shadow blur
+     (22px) so the card's right shadow has room to fade before the window clips
+     it (body has overflow:hidden). */
+  --pet-margin-r: 24px;
   --pet-margin-b: 6px;
 }
 
@@ -82,7 +85,13 @@ body {
 
 /* 카드 스택 */
 .cards {
-  width: 100%;
+  /* overflow-y:auto forces overflow-x to compute to a clipping value too (CSS:
+     a non-visible overflow on one axis turns `visible` on the other into auto).
+     With right padding 0 that sheared the card's RIGHT shadow off at the card
+     edge. Fix: widen by 24 and add 24 right padding so the shadow falls inside
+     the scroll clip box, then pull back 24 with a negative margin so the card's
+     right edge still sits flush with the pet/collapse button. */
+  width: calc(100% + 24px); margin-right: -24px;
   display: flex; flex-direction: column; gap: var(--card-gap);
   /* NO justify-content: flex-end — it breaks scrolling (top items become
      unreachable in Chromium). The first card gets margin-top:auto in JS instead,
@@ -90,10 +99,9 @@ body {
   margin-bottom: 0;
   max-height: 290px;
   overflow-y: auto;
-  /* shadow room on the left/top; right is flush (0) so the card right edge lines
-     up with the pet/collapse button; bottom gives a little clearance above the
-     collapse button so the lowest card isn't crowding it */
-  padding: 20px 0 18px 24px;
+  /* 24px on the left/right is shadow room (kept inside the clip box); bottom 18
+     clears the collapse button so the lowest card isn't crowding it */
+  padding: 20px 24px 18px 24px;
   scrollbar-width: none;
   transition: opacity .2s ease, transform .28s ease;
 }
