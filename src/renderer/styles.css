@@ -111,8 +111,11 @@ body {
   box-shadow: var(--card-shadow);
   min-height: var(--card-min-h);
   transform-origin: bottom right;
-  transition: transform .26s cubic-bezier(.2,.8,.2,1), opacity .2s;
+  transition: transform .26s cubic-bezier(.2,.8,.2,1), opacity .2s, box-shadow .15s, background .15s;
 }
+/* hover emphasis: a deeper shadow (card lifts) + a touch brighter — no layout
+   shift. Same blur as the base shadow so it doesn't clip against .cards. */
+.card:hover { background: #FFFFFF; box-shadow: 0 8px 22px rgba(0,0,0,0.30); }
 .card.is-new { animation: cardIn .26s cubic-bezier(.2,.8,.2,1); }   /* 진입 애니는 신규 카드 1회만 */
 @keyframes cardIn { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
 .card.is-leaving { opacity: 0; transform: translateY(8px) scale(.96); }
@@ -190,7 +193,9 @@ body {
 /* 진입 트리거 = 우상단 상태아이콘 슬롯을 hover 시 '›'(오른쪽) chevron으로 시분할(소형 회색 원) */
 .slot-chev {
   display: none; place-items: center; padding: 0; cursor: pointer; flex: none;
-  width: 22px; height: 22px; border-radius: 50%; margin-top: 1px;
+  /* SAME 20px as the status icon so swapping them on hover doesn't change the
+     title-row height (no more title↔body gap jump). */
+  width: 20px; height: 20px; border-radius: 50%; margin-top: 1px;
   background: #ECECEF; color: #6A6E76; border: none;
 }
 .slot-chev svg { width: 14px; height: 14px; transition: transform .18s; }
