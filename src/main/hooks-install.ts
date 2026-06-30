@@ -7,7 +7,9 @@
  * name; each event holds matcher groups with a `hooks` array. Handler types
  * include `command` and `http`. We tag every group we own with
  * `_owner:'claude-pet'` so uninstall can find them again without touching
- * foreign hooks.
+ * foreign hooks. Untagged registrations from older builds (pre-`_owner`) are
+ * still recognized by their loopback endpoint shape, so an upgrade cleans up the
+ * stale port instead of stacking a new one beside it.
  *
  * The state events register an `http` hook -> POST /state (fire-and-forget,
  * 100ms target, docs/05 §2). The permission reply registers an `http` hook ->
@@ -21,6 +23,13 @@ import * as path from "node:path";
 
 const DEFAULT_SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json");
 const MARK = "claude-pet"; // tag on every hook group we own (idempotency / uninstall)
+
+// Loopback endpoint shape of every http hook we register (/state, /permission,
+// /reply on 127.0.0.1). Lets us recognize even *untagged* legacy registrations
+// (builds that predate the `_owner` marker), so re-install converges to a single
+// current registration instead of stacking a fresh port beside a stale one.
+const OUR_URL_RE =
+  /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d+\/(?:state|permission|reply)(?:[/?#]|$)/;
 
 // Observation hooks -> POST /state (docs/05 §3.1). fast, non-blocking.
 const STATE_TIMEOUT_MS = 100;
@@ -134,8 +143,25 @@ function appendGroup(hooks: any, event: string, group: any): void {
 }
 
 /**
- * Remove every group tagged with our MARK, dropping now-empty event arrays.
- * Foreign groups (no `_owner`, or a different owner) are preserved verbatim.
+ * True for a group we own: tagged with our MARK, or — for legacy registrations
+ * that predate tagging — shaped like ours (an http hook to a loopback
+ * /state|/permission|/reply endpoint). Foreign groups (e.g. a `command` hook, or
+ * an http hook to any other host/path) return false and are preserved verbatim.
+ */
+function isOurGroup(g: any): boolean {
+  if (!g || typeof g !== "object") return false;
+  if (g._owner === MARK) return true;
+  return (
+    Array.isArray(g.hooks) &&
+    g.hooks.some(
+      (h: any) => h && h.type === "http" && typeof h.url === "string" && OUR_URL_RE.test(h.url)
+    )
+  );
+}
+
+/**
+ * Remove every group we own (see {@link isOurGroup}), dropping now-empty event
+ * arrays. Foreign groups are preserved verbatim.
  * @returns true if anything was removed
  */
 function stripOurHooks(settings: any): boolean {
@@ -146,7 +172,7 @@ function stripOurHooks(settings: any): boolean {
   for (const event of Object.keys(settings.hooks)) {
     const arr = settings.hooks[event];
     if (!Array.isArray(arr)) continue;
-    const kept = arr.filter((g: any) => !(g && g._owner === MARK));
+    const kept = arr.filter((g: any) => !isOurGroup(g));
     if (kept.length !== arr.length) changed = true;
     if (kept.length === 0) delete settings.hooks[event];
     else settings.hooks[event] = kept;

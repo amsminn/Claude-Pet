@@ -55,6 +55,44 @@ test("changing the port re-registers with the new url and reports changed", () =
   cleanup();
 });
 
+test("re-install strips a legacy *untagged* claude-pet hook, keeping one current registration", () => {
+  // A registration from a build that predates `_owner` tagging: it has our
+  // loopback /state endpoint shape but no `_owner` marker. Re-install on a new
+  // port must recognize and remove it (not stack a fresh port beside the stale
+  // one) while leaving a genuine foreign hook untouched.
+  const { p, cleanup } = tmpSettings({
+    hooks: {
+      Stop: [
+        { matcher: "*", hooks: [{ type: "http", url: "http://127.0.0.1:63260/state", timeout: 100 }] },
+        { matcher: "*", hooks: [{ type: "command", command: "echo foreign" }] },
+      ],
+      SessionStart: [
+        { matcher: "*", hooks: [{ type: "http", url: "http://127.0.0.1:63260/state", timeout: 100 }] },
+      ],
+    },
+  });
+  hooks.installHooks({ port: 51704, settingsPath: p });
+  const s = readJson(p);
+
+  // No trace of the stale legacy port anywhere in the file.
+  assert.ok(!JSON.stringify(s).includes(":63260/"), "legacy untagged port fully removed");
+
+  // Exactly one current Stop /state registration, on the new port.
+  const stopState = (s.hooks.Stop || []).filter((g: any) =>
+    (g.hooks || []).some((h: any) => typeof h.url === "string" && h.url.endsWith("/state"))
+  );
+  assert.equal(stopState.length, 1, "single current Stop /state registration");
+  assert.match(stopState[0].hooks[0].url, /:51704\/state$/);
+
+  // The genuine foreign command hook is preserved.
+  const foreign = (s.hooks.Stop || []).filter((g: any) =>
+    (g.hooks || []).some((h: any) => h.type === "command")
+  );
+  assert.equal(foreign.length, 1, "foreign Stop command hook preserved");
+  assert.equal(foreign[0].hooks[0].command, "echo foreign");
+  cleanup();
+});
+
 test("installs a state http hook for every STATE_EVENTS entry with 100ms timeout", () => {
   const { p, cleanup } = tmpSettings();
   hooks.installHooks({ port: 8080, settingsPath: p });
